@@ -49,8 +49,11 @@ marks it as not Git-verified, and hashes every mounted `dinov3/*.py` file.
 2. Run `pvstudy --config config.kaggle.json audit`. Inspect representative positive,
    negative, smallest-target and difficult-background overlays. Resolve any
    near duplicate or scene relation and rerun with `--manual-groups` if needed.
-3. Write a QC JSON with all manifest IDs and the confirmations described in
-   `DATA_PROTOCOL.md`; run `pvstudy --config config.kaggle.json lock-split --qc-file QC.json`.
+3. Run `pvstudy --config config.kaggle.json export-qc`. Download and open
+   `/kaggle/working/pvstudy/qc/qc_review.html` in a browser, review all images,
+   investigate scene relationships, and export the actual `QC.json`.
+   Follow [the quality review guide](QUALITY_REVIEW.md), then run
+   `pvstudy --config config.kaggle.json lock-split --qc-file QC.json`.
 4. Run `pvstudy --config config.kaggle.json verify-encoders --id '正样本/PV-01.tif'`.
    It checks strict weight loading, the 224 native GeoRSCLIP CLS identity,
    512 dense shapes, DINO

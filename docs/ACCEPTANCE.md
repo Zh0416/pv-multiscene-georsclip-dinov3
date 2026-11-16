@@ -15,7 +15,7 @@ unmodified design document has the same SHA-256 as its source:
 | G6 | Test partition remains provisional and sealed. | Final model selection and one-time test are not implemented or run. |
 
 `python -m compileall -q pvstudy tests` passed. `python -m unittest
-discover -s tests -v` passed 12 tests, including one-epoch CPU optimizer
+discover -s tests -v` passed 14 tests, including one-epoch CPU optimizer
 steps for the fusion gate and decoder, CAM site pooling and cache integrity.
 An eight-site synthetic TIFF/cache integration test ran one CAM fold and S2,
 confirmed the CAM result was reused, and produced two validation predictions.
@@ -47,3 +47,25 @@ matching relative paths. The checkpoint dataset lists
 This verifies dataset listings only. Kaggle container mount paths, exact file
 hashes, source checkout, actual checkpoint forward passes and GPU memory
 have **not** been tested from this local machine.
+
+## User-provided Kaggle evidence and QC page
+
+The subsequently supplied `g1_encoder_probe.json` reports a successful CUDA
+interface probe for `正样本/PV-01.tif`: DINO `[1,1024,32,32]` from layers
+20-23, semantic `[1,1,32,32]`, global `[1]`, OpenCLIP 4.2.2, Git-verified
+source commit and 1,895,926,272 peak PyTorch allocated bytes. This is evidence
+for the one-image interface check; semantic quality and dataset performance
+remain unverified.
+
+The uploaded G0 manifest matches all 200 local image/label hashes. Recomputed
+split assignments and script hash agree. The manual QC flag is false and the
+split remains provisional. Source scene/date metadata are missing. The local
+offline page was generated against those uploaded JSONs without changing
+their flags or assignments.
+
+Two additional QC tests verify that previews do not approve or alter input
+data, hash changes are rejected, and the lock rejects stale identity, pending
+issues, duplicate IDs and non-boolean confirmations. A headless Chrome test
+using bundled Playwright verified the 100-image page, full-size zoom, navigation,
+issue-note persistence, draft export/import and zero JavaScript errors.
+No human image or source-scene confirmations were produced by those UI tests.

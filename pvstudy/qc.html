@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>光伏数据 · 人工质检</title>
+<style>
+body{margin:0;background:#f4f6f8;color:#172b3a;font:16px/1.6 system-ui,sans-serif}
+main{max-width:1560px;margin:auto;padding:24px}h1{margin:0;font-size:28px}
+.box{background:white;border:1px solid #d8e0e7;border-radius:10px;padding:18px;margin:16px 0}
+.muted{color:#536779;font-size:14px}.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+button,select,textarea{font:inherit;padding:8px;border:1px solid #9fb0bf;border-radius:6px}
+button{cursor:pointer;background:#edf4fa}button.primary{background:#116080;color:white}
+textarea{box-sizing:border-box;width:100%;min-height:72px;margin-top:6px}
+.panels{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+figure{margin:0}img{width:100%;height:auto;display:block;background:#101920}figcaption{margin-bottom:8px}
+label{display:block;margin:8px 0}#progress{font-weight:600}#metadata{overflow-wrap:anywhere}
+.warn{background:#fff5df;border:1px solid #e5c779;padding:12px;border-radius:6px}
+dialog{max-width:96vw;max-height:96vh;border:1px solid #9fb0bf;border-radius:8px;padding:16px;overflow:auto}dialog img{width:512px;height:512px;max-width:none}dialog::backdrop{background:#142536aa}
+@media(max-width:900px){.panels{grid-template-columns:1fr}}
+</style>
+<main>
+<h1>光伏数据 · 人工质检</h1>
+<p class="muted">逐图检查原始 RGB、标签和覆盖位置。此页只展示数据与标注，不含模型预测。原图与叠加图为 JPEG 预览；标签为无损 PNG。</p>
+<div class="box">
+<div class="row"><button id="previous">上一张</button><select id="imageSelect" aria-label="选择图像"></select><button id="next">下一张</button><span id="progress"></span></div>
+<p id="metadata"></p>
+<div class="panels">
+<figure><figcaption>原始 RGB（第 1 / 2 / 3 波段）</figcaption><a id="rgbLink" target="_blank"><img id="rgb" alt="原始影像"></a></figure>
+<figure><figcaption>标签（白色 = 光伏）</figcaption><a id="maskLink" target="_blank"><img id="mask" alt="二值标签"></a></figure>
+<figure><figcaption>叠加图（粉红色 = 标签区域）</figcaption><a id="overlayLink" target="_blank"><img id="overlay" alt="标签叠加"></a></figure>
+</div>
+<p class="muted">检查颜色与波段顺序、目标边界是否对齐、明显漏标/错标；负图检查是否遗漏光伏。小目标图排在前面。点击图像可查看原尺寸。</p>
+<label>当前图像状态 <select id="status"><option value="pending">未检查</option><option value="reviewed">已检查，无待处理问题</option><option value="issue">发现问题，待处理</option></select></label>
+<label>当前图像备注<textarea id="imageNotes" placeholder="记录错位、疑似漏标、困难背景或其他问题"></textarea></label>
+</div>
+<div class="box">
+<h2>源场景与重复检查</h2>
+<p>5 km 地理分组不等于独立源场景。请结合原始影像来源和可用元数据核实同一电站、同一源场景及相邻裁块；缺少依据时保留未确认并记录限制。</p>
+<div class="warn"><span id="closestPair"></span>下面列出跨开发/测试边界的 10 km 敏感性组，便于集中复核。分组本身不能证明存在泄漏。</div>
+<ul id="crossGroups"></ul><p id="duplicates"></p>
+</div>
+<div class="box">
+<h2>整体确认与导出</h2>
+<label><input type="checkbox" id="band_order_confirmed"> 已核实波段顺序与颜色显示</label>
+<label><input type="checkbox" id="label_alignment_confirmed"> 已逐图检查影像与标签，无未解决的对齐/标注问题</label>
+<label><input type="checkbox" id="source_scene_checked"> 已核查源场景关系，无尚未处理的跨分区同源场景；依据与限制已记入备注</label>
+<label><input type="checkbox" id="duplicate_candidates_resolved"> 重复或近重复候选已核查、已处理</label>
+<label>全局备注（特别记录源场景依据与未知信息）<textarea id="notes"></textarea></label>
+<div class="row"><button id="export" class="primary">导出 QC.json</button><label>恢复记录 <input type="file" id="import" accept=".json,application/json"></label></div>
+<p id="message" role="status">可以随时导出进度；未完成记录不能用于锁定划分。检查结果保存在本页浏览器中，建议及时下载备份。</p>
+</div>
+</main>
+<dialog id="zoom"><button id="closeZoom">关闭原尺寸预览</button><img id="zoomImage" alt="原尺寸图像预览"></dialog>
+<script id="qc-data" type="application/json">__QC_DATA__</script>
+<script>
+"use strict";
+const data=JSON.parse(document.getElementById("qc-data").textContent);
+const byId=new Map(data.entries.map(e=>[e.id,e]));
+const fields=["band_order_confirmed","label_alignment_confirmed","source_scene_checked","duplicate_candidates_resolved"];
+let state={rows:{},flags:{},notes:""};
+const storageKey="pvstudy-qc-"+data.template.review_identity;
+try { const saved=localStorage.getItem(storageKey); if(saved) state=JSON.parse(saved); } catch(e) {}
+const $=id=>document.getElementById(id);
+let current=0;
+function save(){try{localStorage.setItem(storageKey,JSON.stringify(state));}catch(e){$("message").textContent="浏览器无法保存进度，请及时导出 QC.json。";}}
+function updateProgress(){const n=Object.values(state.rows).filter(r=>r.status==="reviewed").length;$("progress").textContent=`已检查 ${n} / ${data.entries.length}`;}
+function render(){
+ const entry=data.entries[current], row=state.rows[entry.id]||{status:"pending",notes:""};
+ $("imageSelect").value=String(current);
+ $("metadata").textContent=`${entry.id} · ${entry.positive?"正样本":"负样本"} · 目标占比 ${(100*entry.fraction).toFixed(3)}% · ${entry.partition} / fold ${entry.fold??"—"} · 站点 ${entry.site} · bounds ${entry.bounds.join(", ")}`;
+ for(const kind of ["rgb","mask","overlay"]){$(kind).src=entry[kind];$(kind+"Link").href=entry[kind];}
+ $("status").value=row.status;$("imageNotes").value=row.notes;updateProgress();
+ $("previous").disabled=current===0;$("next").disabled=current===data.entries.length-1;
+}
+data.entries.forEach((entry,i)=>{const option=document.createElement("option");option.value=String(i);option.textContent=entry.id;$("imageSelect").append(option);});
+for(const group of data.cross_groups){const li=document.createElement("li");li.textContent=group.join(" / ");$("crossGroups").append(li);}
+if(data.closest_pair){const [meters,a,b]=data.closest_pair;$("closestPair").textContent=`最近的开发/测试图对：${a} 与 ${b}，按当前距离算法约 ${(meters/1000).toFixed(3)} km，请优先核实源场景关系。`;}
+$("duplicates").textContent=data.duplicate_candidates.length?"自动重复候选："+JSON.stringify(data.duplicate_candidates):"没有精确重复或相同缩略指纹候选；仍需结合影像进行近重复检查。";
+$("imageSelect").onchange=()=>{current=Number($("imageSelect").value);render();};
+$("previous").onclick=()=>{if(current>0){current--;render();}};
+$("next").onclick=()=>{if(current<data.entries.length-1){current++;render();}};
+for(const kind of ["rgb","mask","overlay"])$(kind+"Link").onclick=event=>{event.preventDefault();$("zoomImage").src=data.entries[current][kind];$("zoom").showModal();};
+$("closeZoom").onclick=()=>$("zoom").close();
+function updateRow(){state.rows[data.entries[current].id]={status:$("status").value,notes:$("imageNotes").value};save();updateProgress();}
+$("status").onchange=updateRow;$("imageNotes").oninput=updateRow;
+function renderFlags(){for(const key of fields)$(key).checked=state.flags[key]===true;$("notes").value=state.notes||"";}
+for(const key of fields)$(key).onchange=()=>{state.flags[key]=$(key).checked;save();};
+$("notes").oninput=()=>{state.notes=$("notes").value;save();};
+$("export").onclick=()=>{
+ const qc={...data.template,reviewed_ids:data.entries.filter(e=>state.rows[e.id]?.status==="reviewed").map(e=>e.id),pending_issues:data.entries.filter(e=>state.rows[e.id]?.status==="issue").map(e=>({id:e.id,notes:state.rows[e.id].notes})),image_reviews:state.rows,notes:state.notes};
+ for(const key of fields)qc[key]=state.flags[key]===true;
+ const link=document.createElement("a"),url=URL.createObjectURL(new Blob([JSON.stringify(qc,null,2)],{type:"application/json"}));
+ link.href=url;link.download="QC.json";link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ $("message").textContent=`已导出：${qc.reviewed_ids.length}/${data.entries.length} 张已检查，${qc.pending_issues.length} 张待处理。全局确认仍须由实际检查决定。`;
+};
+$("import").onchange=async()=>{
+ try{
+  const input=JSON.parse(await $("import").files[0].text());
+  if(input.review_identity!==data.template.review_identity)throw Error("记录对应的清单或划分不同，不能导入");
+  const rows={};for(const [id,row] of Object.entries(input.image_reviews||{})){if(!byId.has(id)||!["pending","reviewed","issue"].includes(row.status))throw Error("逐图记录格式错误");rows[id]={status:row.status,notes:String(row.notes||"")};}
+  state={rows,flags:Object.fromEntries(fields.map(k=>[k,input[k]===true])),notes:String(input.notes||"")};save();renderFlags();render();$("message").textContent="已恢复同一清单和划分的质检进度。";
+ }catch(e){$("message").textContent="导入失败："+e.message;}
+};
+renderFlags();render();
+</script>
+</html>

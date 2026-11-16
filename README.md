@@ -30,7 +30,8 @@ pip install -e .
 pvstudy --config config.kaggle.json prepare-source
 pvstudy --config config.kaggle.json audit
 pvstudy --config config.kaggle.json verify-encoders --id '正样本/PV-01.tif'
-# Complete image/label/source-scene QC, then write QC.json with all reviewed IDs.
+pvstudy --config config.kaggle.json export-qc
+# Review qc_review.html and export the actual QC.json to this working directory.
 pvstudy --config config.kaggle.json lock-split --qc-file QC.json
 pvstudy --config config.kaggle.json cache
 pvstudy --config config.kaggle.json run-fold --fold 0 --seed 42
@@ -46,4 +47,5 @@ unless the split is locked and `--include-test` is explicit. No command in
 this version evaluates test labels; G6 remains unavailable.
 
 Read [Kaggle steps](docs/KAGGLE.md), [data contract](docs/DATA_PROTOCOL.md),
-and [local acceptance](docs/ACCEPTANCE.md) before a full run.
+[manual quality review](docs/QUALITY_REVIEW.md), and
+[local acceptance](docs/ACCEPTANCE.md) before a full run.

@@ -29,6 +29,12 @@ and `source_scene_checked`. If duplicate candidates exist, it also requires
 explicit lock is an audit assertion by the researcher; code cannot perform
 the visual checks on their behalf.
 
+Use `export-qc` to generate a self-contained offline image/label review page.
+It provides unconfirmed per-image review states and exports `QC.json` bound
+to the current manifest and split. The lock rejects pending issues, incomplete
+or duplicate reviewed IDs, non-boolean confirmations and stale review identity.
+See [the step-by-step quality review guide](QUALITY_REVIEW.md).
+
 Training folds use only development sites. For each outer training fold,
 four inner site partitions produce out-of-fold semantic probabilities and
 bank responses. Calibration and prototypes for an inner held-out site use

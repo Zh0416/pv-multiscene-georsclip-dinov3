@@ -16,6 +16,7 @@ from .experiment import run_fold
 from .io import read_json, sha256, write_json
 from .splits import build_split, partition_ids
 from .source import prepare_dinov3_source
+from .qc import export_qc, validate_qc
 
 
 def parser() -> argparse.ArgumentParser:
@@ -27,6 +28,7 @@ def parser() -> argparse.ArgumentParser:
     sub.add_parser("prepare-source", help="Get the pinned official DINOv3 source checkout")
     audit = sub.add_parser("audit", help="Write data manifest and provisional site split")
     audit.add_argument("--manual-groups", type=Path)
+    sub.add_parser("export-qc", help="Export an offline image/label QC page and unconfirmed draft")
     lock = sub.add_parser("lock-split", help="Lock an audited split after independent manual QC")
     lock.add_argument("--qc-file", type=Path, required=True)
     verify = sub.add_parser("verify-encoders", help="Run G1 deterministic shape and freeze checks")
@@ -71,18 +73,18 @@ def main(argv: list[str] | None = None) -> None:
         write_json(output / "dataset_manifest.json", manifest)
         write_json(output / "split_lock.json", split)
         print(f"Provisional G0 audit: {len(manifest['images'])} pairs; test={split['counts']['test']}; manual QC pending")
+    elif args.command == "export-qc":
+        manifest = read_json(output / "dataset_manifest.json")
+        split = read_json(output / "split_lock.json")
+        page = export_qc(config.image_dir, config.label_dir, manifest, split, output / "qc")
+        print(f"Open {page} in a browser; QC remains unconfirmed until reviewed")
     elif args.command == "lock-split":
         manifest = read_json(output / "dataset_manifest.json")
         split = read_json(output / "split_lock.json")
         qc = read_json(args.qc_file)
-        ids = {r["id"] for r in manifest["images"]}
-        if split["status"] != "candidate_requires_manual_qc" or set(qc.get("reviewed_ids", [])) != ids:
-            raise ValueError("QC must explicitly list every audited image ID before lock")
-        if not qc.get("band_order_confirmed") or not qc.get("label_alignment_confirmed") or not qc.get("source_scene_checked"):
-            raise ValueError("QC must confirm RGB order, alignment and source-scene checks")
-        if manifest["exact_duplicate_images"] or manifest["matching_thumbnail_fingerprints"]:
-            if not qc.get("duplicate_candidates_resolved"):
-                raise ValueError("Resolve duplicate/thumbnail matches before lock")
+        if split["status"] != "candidate_requires_manual_qc":
+            raise ValueError("Only a provisional split may be locked")
+        validate_qc(manifest, split, qc)
         split["status"] = "locked_after_manual_qc"
         split["qc_sha256"] = sha256(args.qc_file)
         manifest["manual_qc_confirmed"] = True
