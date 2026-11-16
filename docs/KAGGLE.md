@@ -54,6 +54,11 @@ marks it as not Git-verified, and hashes every mounted `dinov3/*.py` file.
    investigate scene relationships, and export the actual `QC.json`.
    Follow [the quality review guide](QUALITY_REVIEW.md), then run
    `pvstudy --config config.kaggle.json lock-split --qc-file QC.json`.
+   For the user-confirmed 2026-11-17 correction of five mistaken issue flags,
+   the private repository includes `protocol/QC.confirmed-20261117.json`.
+   On the unchanged provisional manifest/split, use that file as `--qc-file`;
+   its provenance and remaining source-scene limitation are documented in
+   `protocol/README.md`. Do not use it after changing masks or split assignments.
 4. Run `pvstudy --config config.kaggle.json verify-encoders --id '正样本/PV-01.tif'`.
    It checks strict weight loading, the 224 native GeoRSCLIP CLS identity,
    512 dense shapes, DINO

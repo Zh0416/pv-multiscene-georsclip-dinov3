@@ -28,6 +28,13 @@ def validate_qc(manifest: dict, split: dict, qc: dict) -> None:
     if (not isinstance(reviewed, list) or not all(isinstance(v, str) for v in reviewed)
             or len(reviewed) != len(ids) or set(reviewed) != ids):
         raise ValueError("QC must list every audited image ID exactly once")
+    if qc.get("schema") == "pvstudy-manual-qc-v1":
+        reviews = qc.get("image_reviews")
+        if not isinstance(reviews, dict) or set(reviews) != ids or any(
+            not isinstance(review, dict) or review.get("status") != "reviewed"
+            for review in reviews.values()
+        ):
+            raise ValueError("Every exported image review must be marked reviewed")
     for name in ("band_order_confirmed", "label_alignment_confirmed", "source_scene_checked"):
         if qc.get(name) is not True:
             raise ValueError(f"QC confirmation is missing: {name}")

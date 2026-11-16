@@ -1,0 +1,530 @@
+{
+  "band_order_confirmed": true,
+  "correction_history": [
+    {
+      "date": "2026-11-17",
+      "ids": [
+        "正样本/PV-09.tif",
+        "正样本/PV-10.tif",
+        "正样本/PV-34.tif",
+        "正样本/PV-38.tif",
+        "正样本/PV-64.tif"
+      ],
+      "new_status": "reviewed",
+      "previous_status": "issue",
+      "reason": "用户在本次会话明确复核确认五张无漏标，先前标记为误判。",
+      "source_qc_sha256": "a8f472921a5ae8b2a94c53cb60431a94d15004dfa60c4a3b4f9bcaa9b5d1a708"
+    }
+  ],
+  "duplicate_candidates_resolved": true,
+  "image_reviews": {
+    "正样本/PV-01.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-02.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-03.tif": {
+      "notes": "漏标",
+      "status": "reviewed"
+    },
+    "正样本/PV-04.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-05.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-06.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-07.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-08.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-09.tif": {
+      "notes": "2026-11-17 用户复核确认：无漏标；先前标记为误判。",
+      "status": "reviewed"
+    },
+    "正样本/PV-10.tif": {
+      "notes": "2026-11-17 用户复核确认：无漏标；先前标记为误判。",
+      "status": "reviewed"
+    },
+    "正样本/PV-11.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-12.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-13.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-14.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-15.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-16.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-17.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-18.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-19.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-20.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-21.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-22.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-23.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-24.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-25.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-26.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-27.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-28.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-29.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-30.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-31.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-32.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-33.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-34.tif": {
+      "notes": "2026-11-17 用户复核确认：无漏标；先前标记为误判。",
+      "status": "reviewed"
+    },
+    "正样本/PV-35.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-36.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-37.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-38.tif": {
+      "notes": "2026-11-17 用户复核确认：无漏标；先前标记为误判。",
+      "status": "reviewed"
+    },
+    "正样本/PV-39.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-40.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-41.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-42.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-43.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-44.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-45.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-46.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-47.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-48.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-49.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-50.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-51.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-52.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-53.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-54.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-55.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-56.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-57.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-58.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-59.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-60.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-61.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-62.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-63.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-64.tif": {
+      "notes": "2026-11-17 用户复核确认：无漏标；先前标记为误判。",
+      "status": "reviewed"
+    },
+    "正样本/PV-65.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-66.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-67.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-68.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-69.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-70.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-71.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-72.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-73.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-74.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-75.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-76.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-77.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-78.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-79.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "正样本/PV-80.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "负样本/PV-100.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "负样本/PV-81.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "负样本/PV-82.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "负样本/PV-83.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "负样本/PV-84.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "负样本/PV-85.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "负样本/PV-86.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "负样本/PV-87.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "负样本/PV-88.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "负样本/PV-89.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "负样本/PV-90.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "负样本/PV-91.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "负样本/PV-92.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "负样本/PV-93.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "负样本/PV-94.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "负样本/PV-95.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "负样本/PV-96.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "负样本/PV-97.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "负样本/PV-98.tif": {
+      "notes": "",
+      "status": "reviewed"
+    },
+    "负样本/PV-99.tif": {
+      "notes": "",
+      "status": "reviewed"
+    }
+  },
+  "label_alignment_confirmed": true,
+  "notes": "2026-11-17 用户明确复核确认 PV-09、PV-10、PV-34、PV-38、PV-64 无漏标；原五项待处理标记已撤销。源场景确认沿用原始 QC 全局勾选，未由程序独立验证。",
+  "pending_issues": [],
+  "review_identity": "b1f9dfdafd70dce952bde2aa3a03caf1436efe823119281275b1c21e5f7980dd",
+  "reviewed_ids": [
+    "正样本/PV-74.tif",
+    "正样本/PV-26.tif",
+    "正样本/PV-24.tif",
+    "正样本/PV-33.tif",
+    "正样本/PV-12.tif",
+    "正样本/PV-28.tif",
+    "正样本/PV-66.tif",
+    "正样本/PV-03.tif",
+    "正样本/PV-49.tif",
+    "正样本/PV-17.tif",
+    "正样本/PV-40.tif",
+    "正样本/PV-45.tif",
+    "正样本/PV-72.tif",
+    "正样本/PV-61.tif",
+    "正样本/PV-59.tif",
+    "正样本/PV-62.tif",
+    "正样本/PV-47.tif",
+    "正样本/PV-46.tif",
+    "正样本/PV-36.tif",
+    "正样本/PV-19.tif",
+    "正样本/PV-07.tif",
+    "正样本/PV-37.tif",
+    "正样本/PV-35.tif",
+    "正样本/PV-58.tif",
+    "正样本/PV-57.tif",
+    "正样本/PV-31.tif",
+    "正样本/PV-77.tif",
+    "正样本/PV-60.tif",
+    "正样本/PV-63.tif",
+    "正样本/PV-34.tif",
+    "正样本/PV-52.tif",
+    "正样本/PV-69.tif",
+    "正样本/PV-78.tif",
+    "正样本/PV-01.tif",
+    "正样本/PV-44.tif",
+    "正样本/PV-51.tif",
+    "正样本/PV-18.tif",
+    "正样本/PV-32.tif",
+    "正样本/PV-64.tif",
+    "正样本/PV-23.tif",
+    "正样本/PV-29.tif",
+    "正样本/PV-55.tif",
+    "正样本/PV-56.tif",
+    "正样本/PV-38.tif",
+    "正样本/PV-54.tif",
+    "正样本/PV-39.tif",
+    "正样本/PV-10.tif",
+    "正样本/PV-22.tif",
+    "正样本/PV-21.tif",
+    "正样本/PV-79.tif",
+    "正样本/PV-71.tif",
+    "正样本/PV-30.tif",
+    "正样本/PV-43.tif",
+    "正样本/PV-25.tif",
+    "正样本/PV-73.tif",
+    "正样本/PV-08.tif",
+    "正样本/PV-16.tif",
+    "正样本/PV-04.tif",
+    "正样本/PV-06.tif",
+    "正样本/PV-65.tif",
+    "正样本/PV-02.tif",
+    "正样本/PV-80.tif",
+    "正样本/PV-41.tif",
+    "正样本/PV-20.tif",
+    "正样本/PV-11.tif",
+    "正样本/PV-53.tif",
+    "正样本/PV-50.tif",
+    "正样本/PV-42.tif",
+    "正样本/PV-67.tif",
+    "正样本/PV-27.tif",
+    "正样本/PV-09.tif",
+    "正样本/PV-76.tif",
+    "正样本/PV-05.tif",
+    "正样本/PV-48.tif",
+    "正样本/PV-70.tif",
+    "正样本/PV-68.tif",
+    "正样本/PV-13.tif",
+    "正样本/PV-15.tif",
+    "正样本/PV-14.tif",
+    "正样本/PV-75.tif",
+    "负样本/PV-100.tif",
+    "负样本/PV-81.tif",
+    "负样本/PV-82.tif",
+    "负样本/PV-83.tif",
+    "负样本/PV-84.tif",
+    "负样本/PV-85.tif",
+    "负样本/PV-86.tif",
+    "负样本/PV-87.tif",
+    "负样本/PV-88.tif",
+    "负样本/PV-89.tif",
+    "负样本/PV-90.tif",
+    "负样本/PV-91.tif",
+    "负样本/PV-92.tif",
+    "负样本/PV-93.tif",
+    "负样本/PV-94.tif",
+    "负样本/PV-95.tif",
+    "负样本/PV-96.tif",
+    "负样本/PV-97.tif",
+    "负样本/PV-98.tif",
+    "负样本/PV-99.tif"
+  ],
+  "schema": "pvstudy-manual-qc-v1",
+  "source_scene_checked": true
+}

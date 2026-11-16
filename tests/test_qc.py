@@ -60,11 +60,13 @@ class QualityReviewTests(unittest.TestCase):
         split = {"assignment": {"a": {"site": "one", "fold": 0, "partition": "dev"}}}
         qc = {"schema": "pvstudy-manual-qc-v1", "review_identity": review_identity(manifest, split),
               "reviewed_ids": ["a"], "band_order_confirmed": True,
-              "label_alignment_confirmed": True, "source_scene_checked": True}
+              "label_alignment_confirmed": True, "source_scene_checked": True,
+              "image_reviews": {"a": {"status": "reviewed", "notes": ""}}}
         validate_qc(manifest, split, qc)
         for bad in ({**qc, "source_scene_checked": "false"},
                     {**qc, "pending_issues": [{"id": "a"}]},
                     {**qc, "reviewed_ids": ["a", "a"]},
+                    {**qc, "image_reviews": {"a": {"status": "issue"}}},
                     {**qc, "review_identity": "stale"}):
             with self.assertRaises(ValueError):
                 validate_qc(manifest, split, bad)
