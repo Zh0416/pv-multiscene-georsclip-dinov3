@@ -18,20 +18,25 @@ baselines and experiments.
 ## Setup
 
 Use Python 3.9+ and a CUDA PyTorch build for real encoder runs. In Kaggle,
-install this project and its declared dependencies, then supply the five
-external paths through `config.json` or CLI overrides. `config.example.json`
-contains placeholders only. The DINOv3 source checkout is a separate input
-and its Git commit is recorded in the cache identity.
+place a writable copy of this repository under `/kaggle/working` and install
+it with its declared dependencies. `config.kaggle.json`
+contains the confirmed checkpoint, image and label mounts; `config.example.json`
+remains a template for other environments. The DINOv3 source checkout is
+prepared separately at the pinned official commit and recorded in the cache
+identity.
 
 ```bash
 pip install -e .
-pvstudy --config config.json audit
-pvstudy --config config.json verify-encoders --id 'positive/PV-01.tif'
-pvstudy --config config.json cache
-pvstudy --config config.json run-fold --fold 0 --seed 42
-pvstudy --config config.json run-fold --fold 0 --seed 42 --variant S2
-pvstudy --config config.json run-fold --fold 0 --seed 42 --variant S6
-pvstudy --config config.json summarize-dev
+pvstudy --config config.kaggle.json prepare-source
+pvstudy --config config.kaggle.json audit
+pvstudy --config config.kaggle.json verify-encoders --id '正样本/PV-01.tif'
+# Complete image/label/source-scene QC, then write QC.json with all reviewed IDs.
+pvstudy --config config.kaggle.json lock-split --qc-file QC.json
+pvstudy --config config.kaggle.json cache
+pvstudy --config config.kaggle.json run-fold --fold 0 --seed 42
+pvstudy --config config.kaggle.json run-fold --fold 0 --seed 42 --variant S2
+pvstudy --config config.kaggle.json run-fold --fold 0 --seed 42 --variant S6
+pvstudy --config config.kaggle.json summarize-dev
 ```
 
 `audit` writes a **candidate**, not a locked split. Inspect images, masks,

@@ -3,7 +3,7 @@
 | Step | Module | Implemented behavior |
 | --- | --- | --- |
 | G0 | `data.py`, `splits.py`, `cli.py` | Strict TIFF/hash audit; 5 km site components; seeded provisional test/4-fold split; QC lock |
-| G1 | `encoders.py`, `cache.py` | Strict GeoRSCLIP state dict, native CLS identity check, dense patch path; DINO last-four arithmetic mean; frozen cache provenance |
+| G1 | `encoders.py`, `source.py`, `cache.py` | Pinned official DINOv3 checkout, strict GeoRSCLIP state dict, native CLS identity check, dense patch path; DINO last-four arithmetic mean; frozen cache provenance |
 | G2 | `priors.py` | Site-weighted soft-label calibration, inner-site OOF bank, K=1/4/8, purity 0.5/0.7, semantic seed, bank/self blend, optional OOF spatial recalibration |
 | G3 | `models.py`, `experiment.py` | C5/C5g/C6 gate, C7 current-image semantic removal, CAM and route-weight maps, site metrics, bank drift diagnostic |
 | G4/G5 | `models.py`, `experiment.py` | S2-S7, S11, S13, S14 with identical decoder capacity; M channel and optional local M attention bias |

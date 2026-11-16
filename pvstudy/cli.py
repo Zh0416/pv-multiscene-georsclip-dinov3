@@ -15,6 +15,7 @@ from .encoders import load_encoders
 from .experiment import run_fold
 from .io import read_json, sha256, write_json
 from .splits import build_split, partition_ids
+from .source import prepare_dinov3_source
 
 
 def parser() -> argparse.ArgumentParser:
@@ -23,6 +24,7 @@ def parser() -> argparse.ArgumentParser:
     for name in ("image-dir", "label-dir", "georsclip-weights", "dinov3-weights", "dinov3-source", "output-dir", "device"):
         p.add_argument("--" + name)
     sub = p.add_subparsers(dest="command", required=True)
+    sub.add_parser("prepare-source", help="Get the pinned official DINOv3 source checkout")
     audit = sub.add_parser("audit", help="Write data manifest and provisional site split")
     audit.add_argument("--manual-groups", type=Path)
     lock = sub.add_parser("lock-split", help="Lock an audited split after independent manual QC")
@@ -58,7 +60,11 @@ def main(argv: list[str] | None = None) -> None:
     args = parser().parse_args(argv)
     config = _config(args)
     output = config.output_dir
-    if args.command == "audit":
+    if args.command == "prepare-source":
+        if config.dinov3_source_commit is None:
+            raise ValueError("dinov3_source_commit must be configured")
+        print(prepare_dinov3_source(config.dinov3_source, config.dinov3_source_commit))
+    elif args.command == "audit":
         manifest = build_manifest(config.image_dir, config.label_dir)
         manual = read_json(args.manual_groups) if args.manual_groups else None
         split = build_split(manifest, manual)

@@ -15,7 +15,7 @@ unmodified design document has the same SHA-256 as its source:
 | G6 | Test partition remains provisional and sealed. | Final model selection and one-time test are not implemented or run. |
 
 `python -m compileall -q pvstudy tests` passed. `python -m unittest
-discover -s tests -v` passed 10 tests, including one-epoch CPU optimizer
+discover -s tests -v` passed 12 tests, including one-epoch CPU optimizer
 steps for the fusion gate and decoder, CAM site pooling and cache integrity.
 An eight-site synthetic TIFF/cache integration test ran one CAM fold and S2,
 confirmed the CAM result was reused, and produced two validation predictions.
@@ -33,3 +33,13 @@ isolation; Kaggle setup needs a modern build backend as declared in
 
 The local candidate manifest and split are in ignored `outputs/`, so paths,
 labels, caches and candidate assignments are not uploaded with source.
+
+## Kaggle mount update
+
+The user supplied the two exact checkpoint paths and confirmed the image and
+sibling label directories in `config.kaggle.json`. The pinned DINOv3 source
+commit exists in the official GitHub repository; `prepare-source` now checks
+out that commit when Kaggle Internet access is available. These Kaggle mount
+paths, the source checkout, actual checkpoint forward passes and GPU memory
+have **not** been tested from this local machine. A read-only Kaggle API query
+was unavailable locally because the CLI environment lacks `kaggle.json`.

@@ -1,6 +1,9 @@
 import unittest
+import json
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import subprocess
 
 import numpy as np
 import torch
@@ -10,6 +13,8 @@ from pvstudy.experiment import _load_prior_maps, _save_prior_maps, train_decoder
 from pvstudy.models import Decoder, FusionGate, local_indices
 from pvstudy.priors import area_target, fit_calibrator, fit_prior, site_weights
 from pvstudy.splits import partition_ids
+from pvstudy.source import prepare_dinov3_source
+from pvstudy.config import Config
 
 
 class ProtocolTests(unittest.TestCase):
@@ -34,6 +39,32 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(partition_ids(split, "train", 0), ["b"])
         with self.assertRaises(PermissionError):
             partition_ids(split, "test", unlock_test=True)
+
+    def test_existing_source_must_match_pinned_commit(self):
+        with TemporaryDirectory() as temporary:
+            source = Path(temporary) / "dinov3-source"
+            (source / "dinov3" / "hub").mkdir(parents=True)
+            (source / "dinov3" / "hub" / "backbones.py").write_text("# fixture\n", encoding="utf-8")
+            subprocess.run(["git", "init", str(source)], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(source), "add", "."], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(source), "-c", "user.name=Test",
+                            "-c", "user.email=test@example.invalid", "commit", "-m", "fixture"],
+                           check=True, capture_output=True)
+            commit = subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip()
+            self.assertEqual(prepare_dinov3_source(source, commit)["commit"], commit)
+            with self.assertRaises(ValueError):
+                prepare_dinov3_source(source, "0" * 40)
+
+    def test_kaggle_mount_config(self):
+        path = Path(__file__).resolve().parents[1] / "config.kaggle.json"
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(raw["label_dir"], raw["image_dir"].rsplit("/", 1)[0] + "/labels")
+        self.assertEqual(raw["dinov3_source_commit"], "6876159a11b4df116f30f667f8c9888617df0751")
+        if os.name == "nt":
+            with self.assertRaisesRegex(ValueError, "Linux Kaggle runtime"):
+                Config.load(path)
+        else:
+            self.assertEqual(str(Config.load(path).image_dir), raw["image_dir"])
 
     def test_metrics_ties_and_pairing(self):
         self.assertAlmostEqual(average_precision(np.array([1, 0, 1, 0]), np.ones(4)), 0.5)

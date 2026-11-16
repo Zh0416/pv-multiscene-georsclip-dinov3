@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,6 +25,8 @@ class Config:
         raw = json.loads(path.read_text(encoding="utf-8"))
         base = path.resolve().parent
         for key in ("image_dir", "label_dir", "georsclip_weights", "dinov3_weights", "dinov3_source", "output_dir"):
+            if os.name == "nt" and str(raw[key]).startswith("/kaggle/"):
+                raise ValueError("Kaggle /kaggle paths require a Linux Kaggle runtime")
             value = Path(raw[key])
             raw[key] = value if value.is_absolute() else (base / value).resolve()
         config = cls(**raw)
