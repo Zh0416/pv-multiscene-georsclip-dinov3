@@ -39,7 +39,11 @@ labels, caches and candidate assignments are not uploaded with source.
 The user supplied the two exact checkpoint paths and confirmed the image and
 sibling label directories in `config.kaggle.json`. The pinned DINOv3 source
 commit exists in the official GitHub repository; `prepare-source` now checks
-out that commit when Kaggle Internet access is available. These Kaggle mount
-paths, the source checkout, actual checkpoint forward passes and GPU memory
-have **not** been tested from this local machine. A read-only Kaggle API query
-was unavailable locally because the CLI environment lacks `kaggle.json`.
+out that commit when Kaggle Internet access is available. A read-only Kaggle
+API metadata query found 200 dataset files: 100 images and 100 labels with
+matching relative paths. The checkpoint dataset lists
+`RS5M_ViT-B-32.pt` (605,222,594 bytes) and
+`dinov3_vitl16_pretrain_sat493m-eadcf0ff.pth` (1,213,059,235 bytes).
+This verifies dataset listings only. Kaggle container mount paths, exact file
+hashes, source checkout, actual checkpoint forward passes and GPU memory
+have **not** been tested from this local machine.

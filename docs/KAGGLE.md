@@ -10,7 +10,9 @@ by the dataset owner, plus the confirmed sibling label directory:
 /kaggle/input/datasets/zh0416/pv-100scence/PV-多场景/labels
 ```
 
-Kaggle execution has not verified that these files are mounted or readable.
+A read-only Kaggle API listing confirms 100 paired image/label paths and the
+two named checkpoint files in those datasets. It does not verify the runtime
+mount paths, file hashes or model forward passes.
 The configuration also uses `/kaggle/working/dinov3-source` for source and
 `/kaggle/working/pvstudy` for writable outputs. The dedicated Kaggle
 configuration is intentionally rejected on Windows, where `/kaggle/...`
