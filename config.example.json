@@ -1,0 +1,13 @@
+{
+  "image_dir": "/kaggle/input/CHANGE_ME/images",
+  "label_dir": "/kaggle/input/CHANGE_ME/labels",
+  "georsclip_weights": "/kaggle/input/CHANGE_ME/RS5M_ViT-B-32.pt",
+  "dinov3_weights": "/kaggle/input/CHANGE_ME/dinov3_vitl16_pretrain_sat493m-eadcf0ff.pth",
+  "dinov3_source": "/kaggle/input/CHANGE_ME/dinov3-source",
+  "output_dir": "outputs",
+  "device": "cuda",
+  "georsclip_sha256": "129bafaa6a097b8be52e2babf27d24f0a934dae919201e538dc698611bd1ea01",
+  "dinov3_sha256_prefix": "eadcf0ff",
+  "dinov3_source_commit": "6876159a11b4df116f30f667f8c9888617df0751",
+  "augmentation": "none"
+}

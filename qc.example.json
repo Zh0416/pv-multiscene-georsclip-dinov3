@@ -1,0 +1,8 @@
+{
+  "reviewed_ids": [],
+  "band_order_confirmed": false,
+  "label_alignment_confirmed": false,
+  "source_scene_checked": false,
+  "duplicate_candidates_resolved": false,
+  "notes": "Complete manual overlays and source-scene review before setting true."
+}
