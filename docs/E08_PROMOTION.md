@@ -2,16 +2,22 @@
 
 The L/14-336 diagnostic on the locked 79-image development set selected the
 fixed 128-pixel crop, 64-pixel stride, 49-window positive-only CLS route for
-the next development experiment. The reviewed `l14_review.zip` contained
-`l14_summary.json` SHA-256
-`7f1bf50672f51b79e5fad24fadf64a0d66317fb8e6d383729b2c2130abfac55d`.
+the next development experiment. The latest reviewed `l14_review (1).zip`
+had SHA-256 `d1eca54c4f814aaa614fd842914b266b2382be08e2ee2b4dce35ee2351150d1a`
+and contained `l14_summary.json` SHA-256
+`b69a0b81bf51a6953cea85e9d9a8bd6e71d74e6ad528701ac8b2c9e1f0184685`.
 Its diagnostic identity SHA-256 was
 `0051de72878ee10bbebea41cb74de714a0432af5a5cc8fa4ed4f378765368eb7`.
+All four fold reports and preview images matched the previous reviewed archive
+byte for byte. The 79 raw-map SHA-256 values recorded in `timing.json` also
+matched; the summary changed only because the measured extraction times changed.
+The review ZIP does not contain raw maps, so actual raw files are checked by
+`verify-e08-cache` on Kaggle.
 This is an exploratory architecture amendment, not a retroactive E04 success.
 
 The E08 diagnostic produced site-macro AP 0.60062 versus the same-split
 constant 0.21065, positive fold deltas in 4/4 folds, mean negative-site
-false-positive area 0.01465 and median Tesla T4 extraction time 6.00 seconds
+false-positive area 0.01465 and median Tesla T4 extraction time 6.48 seconds
 per image. Negative image PV-93 reached false-positive area 0.140625. The
 registered E04 value-only and V-V paths both stayed below the constant AP.
 These numbers justify a development-only downstream check; they do not prove
@@ -19,8 +25,8 @@ G2-G5 or final test performance.
 
 The new `config.kaggle.e08.json` writes to `/kaggle/working/pvstudy-l14-e08`.
 It reads *raw*, uncalibrated `window_cls_positive_only` arrays from the
-complete `/kaggle/working/pvstudy-l14-336/diagnostics/l14-semantic-v1`
-directory. The compact `l14_review.zip` does not contain those arrays. The
+complete `/kaggle/working/pvstudy-l14-336/diagnostics/l14-semantic-v2`
+directory. The compact review ZIP does not contain those arrays. The
 cache command checks the pinned summary, diagnostic identity, unchanged
 encoder code, locked manifest/split and every raw-map digest. It extracts
 DINOv3 features and the unchanged native full-image CLS score, then writes
@@ -56,7 +62,7 @@ else:
 subprocess.run([sys.executable, '-m', 'pip', 'install', '-e', '.'], cwd=repo, check=True)
 base = [sys.executable, '-m', 'pvstudy.cli', '--config', 'config.kaggle.e08.json']
 source = Path('/kaggle/working/pvstudy-l14-336')
-raw = source / 'diagnostics/l14-semantic-v1/raw'
+raw = source / 'diagnostics/l14-semantic-v2/raw'
 if not (source / 'dataset_manifest.json').is_file() or len(list(raw.glob('*.npz'))) != 79:
     raise FileNotFoundError('Complete L/14 diagnostic output, including 79 raw maps, is required')
 subprocess.run(base + ['prepare-source'], cwd=repo, check=True)
