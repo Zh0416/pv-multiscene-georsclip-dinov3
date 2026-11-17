@@ -19,6 +19,7 @@ from pvstudy.io import read_json, sha256, write_json
 from pvstudy.priors import area_target, fit_patch
 from pvstudy.semantic_probe import _check_split, evaluate_folds, run_semantic_probe
 from pvstudy.hard_negative_probe import evaluate_e03, run_hard_negative_probe
+from pvstudy.semantic_extensions import evaluate_extension, run_extension
 
 
 class FakeGeo:
@@ -41,6 +42,17 @@ class FakeGeo:
         self.calls += 1
         full = F.avg_pool2d(rgb[:, :1].float()/255, 16) - (0.35 if sliding224 else 0.4)
         return full, full + 0.1
+
+    def encode_last_block_pair(self, rgb, *, mode="both"):
+        self.calls += 1
+        base = F.avg_pool2d(rgb[:, :1].float()/255, 16)
+        values = {"value_only": (base - 0.3, base - 0.2),
+                  "vv": (base - 0.25, base - 0.15)}
+        return values if mode == "both" else {mode: values[mode]}
+
+    def encode_window_cls(self, rgb):
+        self.calls += 1
+        return F.avg_pool2d(rgb[:, :1].float()/255, 16) - 0.1
 
 
 class SemanticProbeTests(unittest.TestCase):
@@ -81,6 +93,74 @@ class SemanticProbeTests(unittest.TestCase):
         self.assertTrue(torch.equal(global_before, global_after))
         with self.assertRaisesRegex(ValueError, "one RGB512"):
             geo.encode_sliding224(rgb.expand(2, -1, -1, -1))
+
+    def test_e04_last_block_and_e08_window_encoder_shapes(self):
+        class Attention(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.in_proj_weight = nn.Parameter(torch.randn(2304, 768) * 0.01)
+                self.in_proj_bias = nn.Parameter(torch.zeros(2304))
+                self.num_heads, self.head_dim = 12, 64
+                self.logit_scale = None
+                self.ln_inner = nn.Identity()
+                self.head_scale = None
+                self.out_proj = nn.Linear(768, 768)
+
+        class LastBlock(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.ln_1, self.ln_2 = nn.LayerNorm(768), nn.LayerNorm(768)
+                self.attn = Attention()
+                self.mlp = nn.Sequential(nn.Linear(768, 768), nn.GELU(), nn.Linear(768, 768))
+                self.ls_1, self.ls_2 = nn.Identity(), nn.Identity()
+
+        class Visual(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv1 = nn.Conv2d(3, 768, 32, 32, bias=False)
+                self.class_embedding = nn.Parameter(torch.randn(768) * 0.01)
+                self.positional_embedding = nn.Parameter(torch.randn(50, 768) * 0.01)
+                self.ln_pre, self.ln_post = nn.LayerNorm(768), nn.LayerNorm(768)
+                self.proj = nn.Parameter(torch.randn(768, 512) * 0.01)
+                self.transformer = nn.Module()
+                self.transformer.resblocks = nn.ModuleList([nn.Identity() for _ in range(11)] + [LastBlock()])
+
+        class Model(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.visual = Visual()
+                self.cls_batches = []
+
+            def encode_image(self, x):
+                self.cls_batches.append(tuple(x.shape))
+                means = x.mean(dim=(2, 3))
+                return F.pad(means, (0, 509))
+
+        torch.manual_seed(2)
+        geo = object.__new__(GeoRSCLIP)
+        geo.device = "cpu"
+        geo.model = Model().eval().requires_grad_(False)
+        geo.text_positive = F.normalize(torch.randn(512), dim=0)
+        geo.text_negative = F.normalize(torch.randn(2, 512), dim=-1)
+        rgb = torch.randint(0, 256, (1, 3, 512, 512), dtype=torch.uint8)
+        result = geo.encode_last_block_pair(rgb)
+        self.assertEqual(set(result), {"value_only", "vv"})
+        for full, positive in result.values():
+            self.assertEqual(tuple(full.shape), (1, 1, 32, 32))
+            self.assertTrue(torch.isfinite(full).all())
+            self.assertTrue(torch.isfinite(positive).all())
+            self.assertLessEqual(float((positive - full).abs().max()), 1.00001)
+        self.assertFalse(torch.equal(result["value_only"][0], result["vv"][0]))
+        for mode in ("value_only", "vv"):
+            one = geo.encode_last_block_pair(rgb, mode=mode)
+            self.assertTrue(torch.equal(one[mode][0], result[mode][0]))
+        cls = geo.encode_window_cls(rgb)
+        self.assertEqual(tuple(cls.shape), (1, 1, 32, 32))
+        self.assertTrue(torch.isfinite(cls).all())
+        self.assertEqual(geo.model.cls_batches, [(7, 3, 224, 224)] * 7)
+        self.assertTrue(torch.equal(cls, geo.encode_window_cls(rgb)))
+        with self.assertRaisesRegex(ValueError, "one RGB512"):
+            geo.encode_window_cls(rgb.expand(2, -1, -1, -1))
 
     def _records(self):
         records = []
@@ -156,6 +236,37 @@ class SemanticProbeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "exactly the locked development"):
             evaluate_e03(records + [{**records[0], "id": "sealed.tif"}], split)
 
+    def test_extension_calibration_uses_only_outer_training_sites(self):
+        records, split = self._records()
+        for r in records:
+            r["native_full"] = r["native512"]
+            r["native_positive_only"] = r["native512"] + 0.1
+            r["value_only_full"] = r["native512"] + 0.15
+            r["vv_full"] = r["native512"] + 0.2
+            r["value_only_positive_only"] = r["native512"] + 0.25
+            r["vv_positive_only"] = r["native512"] + 0.3
+        modes = ["constant", "native_full", "value_only_full", "vv_full",
+                 "native_positive_only", "value_only_positive_only", "vv_positive_only"]
+        calls = []
+
+        def spy(train, key):
+            calls.append(({r["id"] for r in train}, key))
+            return fit_patch(train, key)
+
+        with patch("pvstudy.semantic_extensions.fit_patch", side_effect=spy):
+            summary, folds, predictions = evaluate_extension(records, split, modes)
+        self.assertEqual(len(calls), 24)
+        for fold in folds:
+            start = 6 * fold["fold"]
+            for ids, key in calls[start:start + 6]:
+                self.assertEqual(ids, set(fold["train_ids"]))
+                self.assertTrue(ids.isdisjoint(fold["validation_ids"]))
+            self.assertEqual(len(fold["calibrators"]), 6)
+        self.assertEqual(set(predictions["vv_full"]), {r["id"] for r in records})
+        self.assertIn("E04_replacement_pass", summary["comparisons"]["vv_full"])
+        with self.assertRaisesRegex(ValueError, "exactly the locked development"):
+            evaluate_extension(records + [{**records[0], "id": "sealed.tif"}], split, modes)
+
     def test_isolated_probe_resume_and_input_integrity(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -228,6 +339,29 @@ class SemanticProbeTests(unittest.TestCase):
                     self.assertEqual(e03["original_C1_reproduced_folds"], [0,1,2,3])
                     self.assertEqual(e03["E05_full_text_reproduced_folds"], [0,1,2,3])
                     self.assertTrue((output/"diagnostics/e03-no-hard-negatives-v1/e03_review.zip").is_file())
+                    with patch("pvstudy.semantic_extensions.GeoRSCLIP", return_value=fake):
+                        for method in ("e04", "e08"):
+                            extension = run_extension(config, method=method, e03_run_name="e03-no-hard-negatives-v1")
+                            calls = fake.calls
+                            self.assertEqual(extension, run_extension(config, method=method))
+                            self.assertEqual(calls, fake.calls)
+                            self.assertEqual(extension["reference_reproduced_folds"], [0,1,2,3])
+                            self.assertIn("sliding_full", extension["E03_E05_reference_aggregate"])
+                            if method == "e08":
+                                self.assertIn("window_cls_vs_e05_positive_only", extension["comparisons"])
+                            else:
+                                self.assertEqual(set(extension["timing"]), {"value_only", "vv", "native_cls_check"})
+                            name = "e04-last-block-v1" if method == "e04" else "e08-window-cls-v1"
+                            self.assertTrue((output/"diagnostics"/name/f"{method}_review.zip").is_file())
+                            self.assertTrue(list((output/"diagnostics"/name/"predictions").rglob("*.npz")))
+                        extension_meta = next((output/"diagnostics/e04-last-block-v1/raw").glob("*.json"))
+                        saved = extension_meta.read_bytes()
+                        altered = read_json(extension_meta)
+                        altered["sha256"] = "tampered"
+                        write_json(extension_meta, altered)
+                        with self.assertRaisesRegex(ValueError, "Extension raw-map integrity mismatch"):
+                            run_extension(config, method="e04")
+                        extension_meta.write_bytes(saved)
                     for p, digest in originals.items():
                         if p.exists():
                             self.assertEqual(sha256(p), digest)

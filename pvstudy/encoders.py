@@ -191,6 +191,89 @@ class GeoRSCLIP:
             raise RuntimeError("Nonfinite E03 semantic scores")
         return scores[:, :1], scores[:, 1:]
 
+    @torch.no_grad()
+    def encode_last_block_pair(self, rgb: torch.Tensor, *, mode: str = "both") -> dict[str, tuple[torch.Tensor, torch.Tensor]]:
+        """E04: change only the final patch attention; return full and positive scores."""
+        _frozen(self.model)
+        if rgb.shape != (1, 3, 512, 512):
+            raise ValueError("E04 expects one RGB512 image")
+        if mode not in ("both", "value_only", "vv"):
+            raise ValueError("Unknown E04 final-block mode")
+        visual = self.model.visual
+        blocks = getattr(visual.transformer, "resblocks", None)
+        if blocks is None or len(blocks) != 12:
+            raise RuntimeError("E04 requires the 12-block OpenCLIP visual transformer")
+        last = blocks[-1]
+        attn = last.attn
+        if (attn.in_proj_weight is None or attn.in_proj_bias is None or
+            attn.head_dim * attn.num_heads != 768 or attn.logit_scale is not None or
+            not isinstance(last.ls_1, nn.Identity) or not isinstance(last.ls_2, nn.Identity) or
+            not isinstance(attn.ln_inner, nn.Identity) or attn.head_scale is not None):
+            raise RuntimeError("Unsupported E04 final-block attention interface")
+        x = _normalize_rgb(rgb.to(self.device), CLIP_MEAN, CLIP_STD)
+        patch = visual.conv1(x).flatten(2).transpose(1, 2)
+        cls = visual.class_embedding.to(patch.dtype).expand(1, 1, -1)
+        pos = visual.positional_embedding.to(patch.dtype)
+        grid = pos[1:].reshape(1, 7, 7, -1).permute(0, 3, 1, 2)
+        grid = F.interpolate(grid.float(), size=(16, 16), mode="bicubic", align_corners=False)
+        pos = torch.cat((pos[:1], grid.to(patch.dtype).permute(0, 2, 3, 1).reshape(-1, 768)), dim=0)
+        hidden = visual.ln_pre(torch.cat((cls, patch), dim=1) + pos)
+        for block in blocks[:-1]:
+            hidden = block(hidden)
+        patches = hidden[:, 1:]
+        normed = last.ln_1(patches)
+        w_v = attn.in_proj_weight.chunk(3, dim=0)[2]
+        b_v = attn.in_proj_bias.chunk(3)[2]
+        value = F.linear(normed, w_v, b_v)
+        if mode != "value_only":
+            heads = value.reshape(1, 256, attn.num_heads, attn.head_dim).transpose(1, 2)
+            vv = F.scaled_dot_product_attention(heads, heads, heads, dropout_p=0.0,
+                                                scale=attn.head_dim ** -0.5)
+            vv = vv.transpose(1, 2).reshape_as(value)
+        outputs = {}
+        for name in (("value_only", "vv") if mode == "both" else (mode,)):
+            attention_value = value if name == "value_only" else vv
+            tokens = patches + attn.out_proj(attention_value)
+            tokens = tokens + last.mlp(last.ln_2(tokens))
+            features = F.normalize((visual.ln_post(tokens) @ visual.proj).float(), dim=-1)
+            positive = features @ self.text_positive
+            full = positive - (features @ self.text_negative.T).amax(-1)
+            scores = torch.stack((full, positive), dim=1).reshape(1, 2, 16, 16)
+            scores = F.interpolate(scores, size=(32, 32), mode="bilinear", align_corners=False)
+            if not torch.isfinite(scores).all():
+                raise RuntimeError(f"Nonfinite E04 {name} scores")
+            outputs[name] = (scores[:, :1], scores[:, 1:])
+        return outputs
+
+    @torch.no_grad()
+    def encode_window_cls(self, rgb: torch.Tensor) -> torch.Tensor:
+        """E08: score 49 fixed 128-pixel crops with the native 224 CLS path."""
+        _frozen(self.model)
+        if rgb.shape != (1, 3, 512, 512):
+            raise ValueError("E08 expects one RGB512 image")
+        starts = tuple(range(0, 385, 64))
+        locations = [(y, x) for y in starts for x in starts]
+        total = torch.zeros((1, 1, 32, 32), device=self.device, dtype=torch.float32)
+        counts = torch.zeros_like(total)
+        source = rgb.to(self.device).float() / 255.0
+        for offset in range(0, len(locations), 7):
+            chunk = locations[offset:offset + 7]
+            crops = torch.cat([source[:, :, y:y + 128, x:x + 128] for y, x in chunk])
+            crops = F.interpolate(crops, size=(224, 224), mode="bilinear", align_corners=False)
+            crops = (crops - crops.new_tensor(CLIP_MEAN)[None, :, None, None]) / crops.new_tensor(CLIP_STD)[None, :, None, None]
+            features = F.normalize(self.model.encode_image(crops).float(), dim=-1)
+            scores = features @ self.text_positive
+            for index, (y, x) in enumerate(chunk):
+                sy, sx = y // 16, x // 16
+                total[0, 0, sy:sy + 8, sx:sx + 8] += scores[index]
+                counts[0, 0, sy:sy + 8, sx:sx + 8] += 1
+        if not (counts > 0).all():
+            raise RuntimeError("E08 CLS windows left uncovered cells")
+        result = total / counts
+        if not torch.isfinite(result).all():
+            raise RuntimeError("Nonfinite E08 CLS score")
+        return result
+
 
 class DinoSAT:
     def __init__(self, source: Path, weights: Path, expected_prefix: str, device: str):

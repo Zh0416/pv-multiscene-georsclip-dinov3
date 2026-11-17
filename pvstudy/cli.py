@@ -51,6 +51,11 @@ def parser() -> argparse.ArgumentParser:
     hard_neg = sub.add_parser("diagnose-hard-negatives", help="E03: compare full versus positive-only semantic scores on locked development folds")
     hard_neg.add_argument("--e05-run-name", default="e05-recovered-native-v1")
     hard_neg.add_argument("--run-name", default="e03-no-hard-negatives-v1")
+    for command, help_text in (("diagnose-e04", "E04 final-block value-only and V-V semantic diagnostic"),
+                               ("diagnose-window-cls", "E08 exploratory fixed local CLS-window diagnostic")):
+        extension = sub.add_parser(command, help=help_text)
+        extension.add_argument("--e03-run-name", default="e03-no-hard-negatives-v1")
+        extension.add_argument("--run-name")
     restore = sub.add_parser("restore-e05", help="Restore locked E05 reference JSONs from a recovery ZIP or mounted directory")
     restore.add_argument("--source", type=Path, required=True)
     return p
@@ -154,6 +159,10 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "diagnose-hard-negatives":
         from .hard_negative_probe import run_hard_negative_probe
         run_hard_negative_probe(config, e05_run_name=args.e05_run_name, run_name=args.run_name)
+    elif args.command in ("diagnose-e04", "diagnose-window-cls"):
+        from .semantic_extensions import run_extension
+        method = "e04" if args.command == "diagnose-e04" else "e08"
+        run_extension(config, method=method, e03_run_name=args.e03_run_name, run_name=args.run_name)
     elif args.command == "restore-e05":
         from .recovery import restore_e05
         print(restore_e05(args.source, output))

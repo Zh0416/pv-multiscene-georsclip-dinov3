@@ -27,6 +27,8 @@ diagnose-hard-negatives` uses the completed E05 raw maps as the full-text
 reference and fits separate four-fold calibrators for positive-only text
 scores. It compares both fixed geometries without modifying earlier results.
 See [E03 Kaggle instructions](docs/E03.md).
+The isolated E04 final-block and exploratory E08 local-CLS diagnostics are
+documented in [E04/E08 Kaggle instructions](docs/E04_E08.md).
 
 ## Setup
 

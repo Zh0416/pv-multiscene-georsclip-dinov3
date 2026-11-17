@@ -10,9 +10,10 @@
 | Analysis | `metrics.py`, `analysis.py` | Site macro AP/Dice/IoU, negative FP, area Brier/ECE/MAE, paired site bootstrap helper, G2-G5 development checks |
 | E05 diagnostic | `semantic_probe.py`, `GeoRSCLIP.encode_sliding224` | Isolated native512/native224 sliding comparison, four outer-fold calibrations, paired site statistics, synchronized GPU timing, resumable raw maps and review previews; no main-pipeline replacement |
 | E03 diagnostic | `hard_negative_probe.py`, `GeoRSCLIP.encode_semantic_pair` | Full hard-negative score versus positive-only cosine on identical native512 geometry, with sliding224 as E05 follow-up; separate outer-fold calibrations and E05 baseline verification |
+| E04 diagnostic | `semantic_extensions.py`, `GeoRSCLIP.encode_last_block_pair` | Frozen final-block patch value-only and V-V extraction; full-text registered primary comparison, positive-only exploratory follow-up, original CLS invariant |
+| E08 exploratory | `semantic_extensions.py`, `GeoRSCLIP.encode_window_cls` | Fixed 128/64 local CLS windows resized to 224, uniform coverage averaging, positive-only text; isolated development diagnostic |
 
-Registered items **not yet implemented**: GeoRSCLIP value-only/true V-V,
-promotion of the E05 sliding path into the full training pipeline; random-text C8/S12; S0/S1,
+Registered items **not yet implemented**: promotion of E04/E05/E08 paths into the full training pipeline; random-text C8/S12; S0/S1,
 S8/S10, S9 and external pretrained S15/S16; optional loss/normalization/
 window ablations; full development hyperparameter selection, deployment
 threshold selection and the G6 final-dev retraining/once-only test workflow.
