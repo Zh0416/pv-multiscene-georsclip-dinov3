@@ -45,6 +45,8 @@ def parser() -> argparse.ArgumentParser:
     fold.add_argument("--purity", type=float, choices=(0.5, 0.7), default=0.5)
     fold.add_argument("--prototypes", type=int, choices=(1, 4, 8), default=4)
     sub.add_parser("summarize-dev", help="Evaluate registered G2-G5 development gates")
+    probe = sub.add_parser("diagnose-semantic", help="Compare native512 and sliding224 GeoRSCLIP on locked development folds")
+    probe.add_argument("--run-name", default="e05-native224-v1")
     return p
 
 
@@ -140,6 +142,9 @@ def main(argv: list[str] | None = None) -> None:
         result = development_gates(output)
         write_json(output / "development_gates.json", result)
         print(result["status"])
+    elif args.command == "diagnose-semantic":
+        from .semantic_probe import run_semantic_probe
+        run_semantic_probe(config, run_name=args.run_name)
 
 
 if __name__ == "__main__":

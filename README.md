@@ -15,6 +15,13 @@ site-level metrics and development G2-G5 summaries. See
 [implementation status](docs/IMPLEMENTATION.md) for the remaining registered
 baselines and experiments.
 
+After a completed development run, `pvstudy --config config.kaggle.json
+diagnose-semantic` runs an isolated E05 comparison of native512 against
+overlapping native224 patch maps. It reuses the locked split and original
+cache, loads only GeoRSCLIP, and writes a compact review bundle without
+retraining or replacing the existing CAM/decoder results. See
+[E05 Kaggle instructions](docs/E05.md).
+
 ## Setup
 
 Use Python 3.9+ and a CUDA PyTorch build for real encoder runs. In Kaggle,

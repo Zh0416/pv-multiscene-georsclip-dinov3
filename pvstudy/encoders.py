@@ -121,6 +121,37 @@ class GeoRSCLIP:
         log_odds = cls_pos.squeeze(1) - torch.logsumexp(cls_neg, dim=1)
         return dense, log_odds
 
+    @torch.no_grad()
+    def encode_sliding224(self, rgb: torch.Tensor) -> torch.Tensor:
+        """E05: mean overlapping patch scores on the original 32-pixel grid.
+
+        Fixed 224 windows start at 0/96/192/288 on both axes. Every window
+        uses the native 7x7 positional grid. Score averaging precedes the
+        single 16x16 -> 32x32 interpolation; global CLS is not replaced.
+        """
+        _frozen(self.model)
+        if rgb.shape != (1, 3, 512, 512):
+            raise ValueError("Sliding GeoRSCLIP expects one RGB512 image")
+        x = _normalize_rgb(rgb.to(self.device), CLIP_MEAN, CLIP_STD)
+        locations = [(y, x0) for y in (0, 96, 192, 288) for x0 in (0, 96, 192, 288)]
+        total = torch.zeros((1, 1, 16, 16), device=x.device, dtype=torch.float32)
+        counts = torch.zeros_like(total)
+        for start in range(0, len(locations), 4):
+            chunk = locations[start:start + 4]
+            crops = torch.cat([x[:, :, y:y + 224, x0:x0 + 224] for y, x0 in chunk])
+            features = F.normalize(self._tokens(crops).float(), dim=-1)
+            if features.shape != (len(chunk), 50, 512) or not torch.isfinite(features).all():
+                raise RuntimeError("Invalid native-window GeoRSCLIP token layout")
+            margin = features @ self.text_positive - (features @ self.text_negative.T).amax(-1)
+            maps = margin[:, 1:].reshape(len(chunk), 7, 7)
+            for i, (y, x0) in enumerate(chunk):
+                sy, sx = y // 32, x0 // 32
+                total[0, 0, sy:sy + 7, sx:sx + 7] += maps[i]
+                counts[0, 0, sy:sy + 7, sx:sx + 7] += 1
+        if not (counts > 0).all():
+            raise RuntimeError("Sliding windows left uncovered patches")
+        return F.interpolate(total / counts, size=(32, 32), mode="bilinear", align_corners=False)
+
 
 class DinoSAT:
     def __init__(self, source: Path, weights: Path, expected_prefix: str, device: str):
