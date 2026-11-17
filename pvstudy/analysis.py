@@ -78,26 +78,77 @@ def _comparison(grid: dict, candidate: str, control: str, key: str, *, cam: bool
             "positive_folds": sum(v > 0 for v in fold_deltas)}
 
 
-def development_gates(output: Path) -> dict:
-    loaded = load_grid(output)
-    if loaded["missing"]:
-        return {"status": "incomplete", "missing_result_files": loaded["missing"]}
-    grid = loaded["results"]
+def _check_identities(grid: dict, output: Path) -> str:
+    identities = {result["cam_identity"] for result in grid.values()}
+    if len(identities) != 1:
+        raise ValueError("Development results have mixed cache or training identities")
+    modes = {result.get("semantic_mode", "native_full") for result in grid.values()}
+    if len(modes) != 1:
+        raise ValueError("Development results have mixed semantic modes")
+    mode = modes.pop()
+    manifest_path, split_path, index_path = (output / name for name in
+                                             ("dataset_manifest.json", "split_lock.json", "cache/index.json"))
+    present = all(path.is_file() for path in (manifest_path, split_path, index_path))
+    if mode == "window_cls_positive_only" and not present:
+        raise FileNotFoundError("E08 gate summary requires the locked manifest, split and cache index")
+    if present:
+        from .experiment import _identity
+
+        manifest, split, index = (read_json(path) for path in (manifest_path, split_path, index_path))
+        if index["identity"].get("semantic_mode", "native_full") != mode:
+            raise ValueError("Development result semantic mode differs from feature cache")
+        if any(result["cam_identity"] != _identity(manifest, split, index, result["training_config"])
+               for result in grid.values()):
+            raise ValueError("Development result identity differs from current locked cache")
+    return mode
+
+
+def _cam_gates(grid: dict) -> dict:
     cam_names = ("C1", "C2m", "C4", "C5", "C5g")
     cam_ap = {name: _macro(_site_values(grid, "S2", name, cam=True), "ap") for name in cam_names}
     best_simple = max(cam_names, key=lambda name: (cam_ap[name], -cam_names.index(name)))
     g2_sem = _comparison(grid, "C1", "C0a", "ap", cam=True)
     g2_bank = _comparison(grid, "C2", "C0a", "ap", cam=True)
     g3 = _comparison(grid, "C6", best_simple, "ap", cam=True)
-    g4 = _comparison(grid, "S6", "S2", "dice", cam=False)
-    g5 = _comparison(grid, "S7", "S6", "dice", cam=False)
     cover = [grid[("S2", f, s)]["prior"]["bank"]["positive_image_coverage"] for f in FOLDS for s in SEEDS]
     drift = [grid[("S2", f, s)]["bank_drift"]["quality_pass"] for f in FOLDS for s in SEEDS]
-    return {"status": "development_grid_complete", "best_simple_cam": best_simple,
+    return {"best_simple_cam": best_simple,
             "G2": {"semantic": g2_sem, "bank": g2_bank,
                    "bank_coverage_min": min(cover), "bank_drift_all_pass": all(drift),
                    "quality_pass": all(c["delta"] >= 0.05 and c["positive_folds"] >= 3 for c in (g2_sem, g2_bank)) and min(cover) >= 0.95 and all(drift)},
-            "G3": {**g3, "quality_pass": g3["delta"] >= 0.02 and g3["positive_folds"] >= 3 and g3["negative_fp_delta"] <= 0.005},
+            "G3": {**g3, "quality_pass": g3["delta"] >= 0.02 and g3["positive_folds"] >= 3 and g3["negative_fp_delta"] <= 0.005}}
+
+
+def cam_development_gates(output: Path) -> dict:
+    grid, missing = {}, []
+    for fold in FOLDS:
+        for seed in SEEDS:
+            path = output / f"fold-{fold}" / f"seed-{seed}" / "result-cam.json"
+            if not path.is_file():
+                missing.append(str(path))
+                continue
+            result = read_json(path)
+            if (result["fold"], result["seed"], result["variant"]) != (fold, seed, None):
+                raise ValueError(f"CAM result identity mismatch: {path}")
+            grid[("S2", fold, seed)] = result
+    if missing:
+        return {"status": "incomplete", "missing_result_files": missing}
+    mode = _check_identities(grid, output)
+    return {"status": "development_cam_grid_complete", "semantic_mode": mode,
+            **_cam_gates(grid),
+            "limits": "CAM-only G2/G3 development gates; no decoder or test result inferred"}
+
+
+def development_gates(output: Path) -> dict:
+    loaded = load_grid(output)
+    if loaded["missing"]:
+        return {"status": "incomplete", "missing_result_files": loaded["missing"]}
+    grid = loaded["results"]
+    mode = _check_identities(grid, output)
+    g4 = _comparison(grid, "S6", "S2", "dice", cam=False)
+    g5 = _comparison(grid, "S7", "S6", "dice", cam=False)
+    return {"status": "development_grid_complete", "semantic_mode": mode,
+            **_cam_gates(grid),
             "G4": {**g4, "quality_pass": g4["delta"] >= 0.02 and g4["positive_folds"] >= 3 and g4["negative_fp_delta"] <= 0.005},
             "G5": {**g5, "quality_pass": g5["delta"] >= 0.01 and g5["positive_folds"] >= 3 and g5["negative_fp_delta"] <= 0.005},
             "limits": "G2-G5 require real encoder quality review and full baseline grid before G6; no test result inferred"}

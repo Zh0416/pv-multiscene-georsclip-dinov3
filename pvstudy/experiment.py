@@ -246,6 +246,17 @@ def run_fold(config: Config, manifest: dict, split: dict, *, fold: int, seed: in
         raise ValueError("Variant not implemented; refusing to relabel another model")
     if split["status"] != "locked_after_manual_qc":
         raise PermissionError("Manual QC and split lock are required before development training")
+    if config.semantic_mode == "window_cls_positive_only":
+        report_path = config.output_dir / "e08_cache_verification.json"
+        if not report_path.is_file():
+            raise FileNotFoundError("Run verify-e08-cache before E08 development training")
+        report = read_json(report_path)
+        if (report.get("status") != "e08_cache_verified" or
+            report.get("cache_index_sha256") != sha256(config.output_dir / "cache" / "index.json") or
+            report.get("manifest_sha256") != sha256(config.output_dir / "dataset_manifest.json") or
+            report.get("split_sha256") != sha256(config.output_dir / "split_lock.json") or
+            report.get("diagnostic_summary_sha256") != config.semantic_summary_sha256):
+            raise ValueError("E08 cache verification is stale or differs from configured diagnostic")
     index = read_cache_index(config)
     train_ids = partition_ids(split, "train", fold)
     val_ids = partition_ids(split, "validation", fold)
@@ -320,6 +331,7 @@ def run_fold(config: Config, manifest: dict, split: dict, *, fold: int, seed: in
                         "prediction_files": _save_predictions(folder / variant, validation, predictions),
                         "training": history, "parameters": sum(p.numel() for p in decoder.parameters())}
     result = {"schema": "pvstudy-fold-v1", "fold": fold, "seed": seed, "variant": variant,
+              "semantic_mode": config.semantic_mode,
               "train_ids": train_ids, "validation_ids": val_ids, "inner_seed": ready["inner_seed"],
               "training_config": settings, "cam_identity": identity,
               "prior": ready["prior"], "bank_drift": ready["bank_drift"],

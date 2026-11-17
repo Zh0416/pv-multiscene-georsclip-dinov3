@@ -11,6 +11,8 @@ output directory. Follow [the L/14 Kaggle steps](docs/L14_336.md) to reuse the
 locked split and run the new development diagnostic. The original B/32
 configuration remains in `config.kaggle.b32.json`; the E03/E05/E04/E08
 instructions below describe that historical run.
+After reviewing the L/14 E08 diagnostic, use [the isolated E08 development
+workflow](docs/E08_PROMOTION.md) to build a verified cache and run G2-G5.
 
 The implemented path covers strict TIFF audit, provisional 5 km site groups,
 locked 4-fold development assignment, frozen encoder interfaces, feature

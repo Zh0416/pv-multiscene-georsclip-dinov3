@@ -13,8 +13,9 @@
 | E04 diagnostic | `semantic_extensions.py`, `GeoRSCLIP.encode_last_block_pair` | Frozen final-block patch value-only and V-V extraction; full-text registered primary comparison, positive-only exploratory follow-up, original CLS invariant |
 | E08 exploratory | `semantic_extensions.py`, `GeoRSCLIP.encode_window_cls` | Fixed 128/64 local CLS windows resized to 224, uniform coverage averaging, positive-only text; isolated development diagnostic |
 | L/14-336 adaptation | `l14_probe.py`, `encoders.py` | Independent checkpoint/output identity, 518 padded dense input, nine native-336 windows, last-block E04 and resized-336 E08; separate four-fold development calibration |
+| L/14 E08 development | `e08_source.py`, `cache.py`, `analysis.py` | Pinned diagnostic raw-score import into an isolated cache, per-image equality verification, inner-fold recalibration and staged CAM/decoder development gates |
 
-Registered items **not yet implemented**: promotion of E04/E05/E08 paths into the full training pipeline; random-text C8/S12; S0/S1,
+Registered items **not yet implemented**: promotion of E04/E05 paths into the full training pipeline; random-text C8/S12; S0/S1,
 S8/S10, S9 and external pretrained S15/S16; optional loss/normalization/
 window ablations; full development hyperparameter selection, deployment
 threshold selection and the G6 final-dev retraining/once-only test workflow.

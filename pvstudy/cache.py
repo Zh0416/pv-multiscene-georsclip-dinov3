@@ -9,6 +9,7 @@ import rasterio
 import torch
 
 from .config import Config
+from .e08_source import prepare_e08_source, read_e08_map
 from .encoders import GEOMETRIES, NEGATIVE_CLASSES, POSITIVE_PROMPTS, load_encoders
 from .io import read_json, sha256, write_json
 
@@ -39,11 +40,14 @@ def _source_identity(source: Path, declared_commit: str | None) -> dict:
 
 
 def build_cache(config: Config, manifest: dict, ids: list[str] | None = None) -> dict:
-    geo, dino = load_encoders(config)
     rows = {row["id"]: row for row in manifest["images"]}
     selected = sorted(ids if ids is not None else rows)
     if not set(selected) <= rows.keys():
         raise ValueError("Cache contains unknown image ID")
+    semantic_source = prepare_e08_source(config, manifest, selected) if config.semantic_mode == "window_cls_positive_only" else None
+    geo, dino = load_encoders(config)
+    if semantic_source and geo.open_clip_version != semantic_source["open_clip_version"]:
+        raise ValueError("OpenCLIP version differs from approved E08 diagnostic")
     folder = config.output_dir / "cache"
     folder.mkdir(parents=True, exist_ok=True)
     identity = {"schema": "pvstudy-cache-v1", "georsclip_sha256": geo.checkpoint_sha256,
@@ -55,26 +59,55 @@ def build_cache(config: Config, manifest: dict, ids: list[str] | None = None) ->
                 "dino_reduction": "get_intermediate_layers(n=4,reshape=True,norm=True), arithmetic mean",
                 "georsclip_model": config.georsclip_model,
                 "georsclip_dense": geo.geometry.dense_description,
-                "prompts_positive": POSITIVE_PROMPTS, "prompts_negative": NEGATIVE_CLASSES}
-    entries = {}
+                "prompts_positive": list(POSITIVE_PROMPTS), "prompts_negative": list(NEGATIVE_CLASSES)}
+    if semantic_source:
+        identity.update({"semantic_mode": config.semantic_mode, "semantic_source": semantic_source})
+    index_path = folder / "index.json"
+    if index_path.is_file():
+        previous = read_json(index_path)
+        if previous.get("identity") != identity:
+            raise ValueError("Existing feature cache has a different encoder or semantic identity")
+        entries = dict(previous["entries"])
+    else:
+        entries = {}
     for image_id in selected:
         row = rows[image_id]
         image_path = config.image_dir / image_id
         if sha256(image_path) != row["image_sha256"]:
             raise ValueError(f"Image changed after audit: {image_id}")
+        path = folder / _name(image_id)
+        if image_id in entries:
+            entry = entries[image_id]
+            if (entry.get("file") != path.name or entry.get("image_sha256") != row["image_sha256"] or
+                not path.is_file() or sha256(path) != entry.get("cache_sha256")):
+                raise ValueError(f"Existing cache entry integrity mismatch: {image_id}")
+            continue
         with rasterio.open(image_path) as image:
             rgb = torch.from_numpy(image.read().copy())[None]
         with torch.no_grad():
-            sem, global_score = geo.encode(rgb)
+            native, global_score = geo.encode(rgb)
             feat = dino.encode(rgb)
-        path = folder / _name(image_id)
-        np.savez_compressed(path, dino=feat[0].cpu().numpy().astype(np.float32),
-                            semantic_raw=sem[0, 0].cpu().numpy().astype(np.float32),
+        if semantic_source:
+            sem, diagnostic_global, raw_sha = read_e08_map(Path(semantic_source["directory"]), image_id)
+            if not np.isclose(float(global_score[0]), diagnostic_global, rtol=1e-4, atol=1e-5):
+                raise ValueError(f"Native global CLS differs from approved E08 diagnostic: {image_id}")
+        else:
+            sem, raw_sha = native[0, 0].cpu().numpy().astype(np.float32), None
+        temporary = path.with_suffix(".tmp.npz")
+        np.savez_compressed(temporary, dino=feat[0].cpu().numpy().astype(np.float32),
+                            semantic_raw=sem,
                             global_raw=global_score[0].cpu().numpy().astype(np.float32))
+        temporary.replace(path)
         entries[image_id] = {"file": path.name, "cache_sha256": sha256(path),
                              "image_sha256": row["image_sha256"]}
+        if raw_sha:
+            entries[image_id]["semantic_source_sha256"] = raw_sha
+        temporary_index = index_path.with_suffix(".tmp.json")
+        write_json(temporary_index, {"identity": identity, "entries": entries})
+        temporary_index.replace(index_path)
     payload = {"identity": identity, "entries": entries}
-    write_json(folder / "index.json", payload)
+    if not index_path.is_file():
+        write_json(index_path, payload)
     return payload
 
 
@@ -85,10 +118,17 @@ def load_feature(config: Config, manifest: dict, index: dict, image_id: str) -> 
         index["identity"]["augmentation"] != config.augmentation or
         index["identity"]["georsclip_sha256"] != config.georsclip_sha256 or
         index["identity"].get("georsclip_model", "ViT-B/32") != config.georsclip_model or
+        index["identity"].get("semantic_mode", "native_full") != config.semantic_mode or
         index["identity"].get("georsclip_dense", GEOMETRIES["ViT-B/32"].dense_description) != GEOMETRIES[config.georsclip_model].dense_description or
         not index["identity"]["dinov3_sha256"].startswith(config.dinov3_sha256_prefix) or
         entry["image_sha256"] != row["image_sha256"]):
         raise ValueError("Cache provenance mismatch")
+    if config.semantic_mode == "window_cls_positive_only":
+        source = index["identity"].get("semantic_source") or {}
+        if (source.get("directory") != str(config.semantic_diagnostic_dir.resolve()) or
+            source.get("summary_sha256") != config.semantic_summary_sha256 or
+            not entry.get("semantic_source_sha256")):
+            raise ValueError("E08 cache source provenance mismatch")
     path = config.output_dir / "cache" / entry["file"]
     if path.resolve().parent != (config.output_dir / "cache").resolve() or sha256(path) != entry["cache_sha256"]:
         raise ValueError("Cache file integrity mismatch")
@@ -118,3 +158,38 @@ def load_record(config: Config, manifest: dict, index: dict, split: dict, image_
 
 def read_cache_index(config: Config) -> dict:
     return read_json(config.output_dir / "cache" / "index.json")
+
+
+def verify_e08_cache(config: Config) -> dict:
+    if config.semantic_mode != "window_cls_positive_only":
+        raise ValueError("verify-e08-cache requires the E08 configuration")
+    manifest = read_json(config.output_dir / "dataset_manifest.json")
+    split = read_json(config.output_dir / "split_lock.json")
+    from .semantic_probe import _check_split
+
+    ids = _check_split(manifest, split)
+    source = prepare_e08_source(config, manifest, ids)
+    index = read_cache_index(config)
+    if (index["identity"].get("semantic_mode") != config.semantic_mode or
+        index["identity"].get("semantic_source") != source or
+        set(index["entries"]) != set(ids)):
+        raise ValueError("E08 cache index differs from locked diagnostic or development split")
+    for image_id in ids:
+        entry = index["entries"][image_id]
+        raw, diagnostic_global, raw_sha = read_e08_map(Path(source["directory"]), image_id)
+        if entry.get("semantic_source_sha256") != raw_sha:
+            raise ValueError(f"E08 source digest differs from cache index: {image_id}")
+        cached = load_feature(config, manifest, index, image_id)
+        if not np.array_equal(cached["semantic_raw"], raw):
+            raise ValueError(f"E08 cache map differs from approved raw map: {image_id}")
+        if not np.isclose(cached["global_raw"], diagnostic_global, rtol=1e-4, atol=1e-5):
+            raise ValueError(f"E08 global CLS differs from approved diagnostic: {image_id}")
+    report = {"status": "e08_cache_verified", "development_images": len(ids),
+              "cache_index_sha256": sha256(config.output_dir / "cache" / "index.json"),
+              "manifest_sha256": sha256(config.output_dir / "dataset_manifest.json"),
+              "split_sha256": sha256(config.output_dir / "split_lock.json"),
+              "diagnostic_identity_sha256": source["identity_sha256"],
+              "diagnostic_summary_sha256": source["summary_sha256"],
+              "semantic_mode": config.semantic_mode, "test_images_read": 0}
+    write_json(config.output_dir / "e08_cache_verification.json", report)
+    return report

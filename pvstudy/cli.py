@@ -7,8 +7,8 @@ from pathlib import Path
 import rasterio
 import torch
 
-from .cache import _source_identity, build_cache
-from .analysis import development_gates
+from .cache import _source_identity, build_cache, verify_e08_cache
+from .analysis import cam_development_gates, development_gates
 from .config import Config
 from .encoders import GEOMETRIES, GeoRSCLIP, load_encoders
 from .data import build_manifest
@@ -37,6 +37,7 @@ def parser() -> argparse.ArgumentParser:
     verify_geo.add_argument("--id", required=True)
     cache = sub.add_parser("cache", help="Cache frozen development-set features")
     cache.add_argument("--include-test", action="store_true")
+    sub.add_parser("verify-e08-cache", help="Compare every E08 cache map with the locked diagnostic raw map")
     fold = sub.add_parser("run-fold", help="Train OOF CAMs and one decoder variant")
     fold.add_argument("--fold", type=int, choices=range(4), required=True)
     fold.add_argument("--seed", type=int, choices=(42, 43, 44), required=True)
@@ -47,6 +48,7 @@ def parser() -> argparse.ArgumentParser:
     fold.add_argument("--purity", type=float, choices=(0.5, 0.7), default=0.5)
     fold.add_argument("--prototypes", type=int, choices=(1, 4, 8), default=4)
     sub.add_parser("summarize-dev", help="Evaluate registered G2-G5 development gates")
+    sub.add_parser("summarize-cam", help="Evaluate G2/G3 after four folds and three CAM seeds")
     probe = sub.add_parser("diagnose-semantic", help="Compare native512 and sliding224 GeoRSCLIP on locked development folds")
     probe.add_argument("--run-name", default="e05-native224-v1")
     probe.add_argument("--recompute-native", action="store_true", help="Rebuild only semantic scores when original feature arrays are lost; requires four original C1 reports")
@@ -159,6 +161,8 @@ def main(argv: list[str] | None = None) -> None:
         write_json(output / ("g1_georsclip_probe.json" if geo_only else "g1_encoder_probe.json"), info)
         print(info)
     elif args.command == "cache":
+        if args.include_test and config.semantic_mode == "window_cls_positive_only":
+            raise PermissionError("E08 development cache cannot include sealed test images")
         manifest = read_json(output / "dataset_manifest.json")
         split = read_json(output / "split_lock.json")
         ids = partition_ids(split, "dev")
@@ -166,6 +170,8 @@ def main(argv: list[str] | None = None) -> None:
             ids += partition_ids(split, "test", unlock_test=True)
         result = build_cache(config, manifest, ids)
         print(f"Cached {len(result['entries'])} images")
+    elif args.command == "verify-e08-cache":
+        print(verify_e08_cache(config))
     elif args.command == "run-fold":
         manifest = read_json(output / "dataset_manifest.json")
         split = read_json(output / "split_lock.json")
@@ -176,6 +182,10 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "summarize-dev":
         result = development_gates(output)
         write_json(output / "development_gates.json", result)
+        print(result["status"])
+    elif args.command == "summarize-cam":
+        result = cam_development_gates(output)
+        write_json(output / "cam_development_gates.json", result)
         print(result["status"])
     elif args.command == "diagnose-semantic":
         if config.georsclip_model != "ViT-B/32":
