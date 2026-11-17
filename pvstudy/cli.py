@@ -47,6 +47,9 @@ def parser() -> argparse.ArgumentParser:
     sub.add_parser("summarize-dev", help="Evaluate registered G2-G5 development gates")
     probe = sub.add_parser("diagnose-semantic", help="Compare native512 and sliding224 GeoRSCLIP on locked development folds")
     probe.add_argument("--run-name", default="e05-native224-v1")
+    probe.add_argument("--recompute-native", action="store_true", help="Rebuild only semantic scores when original feature arrays are lost; requires four original C1 reports")
+    restore = sub.add_parser("restore-e05", help="Restore locked E05 reference JSONs from a recovery ZIP or mounted directory")
+    restore.add_argument("--source", type=Path, required=True)
     return p
 
 
@@ -144,7 +147,10 @@ def main(argv: list[str] | None = None) -> None:
         print(result["status"])
     elif args.command == "diagnose-semantic":
         from .semantic_probe import run_semantic_probe
-        run_semantic_probe(config, run_name=args.run_name)
+        run_semantic_probe(config, run_name=args.run_name, recompute_native=args.recompute_native)
+    elif args.command == "restore-e05":
+        from .recovery import restore_e05
+        print(restore_e05(args.source, output))
 
 
 if __name__ == "__main__":

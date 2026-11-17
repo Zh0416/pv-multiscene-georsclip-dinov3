@@ -171,12 +171,31 @@ class SemanticProbeTests(unittest.TestCase):
                 self.assertTrue((output/"diagnostics/e05-native224-v1/e05_review.zip").is_file())
                 for p, digest in originals.items():
                     self.assertEqual(sha256(p), digest)
-                metadata_path = next((output/"diagnostics/e05-native224-v1/raw").glob("*.json"))
+                # Recovery uses original JSON references, with no feature arrays left.
+                for p in (output/"cache").glob("*.npz"):
+                    p.unlink()
+                recovered = run_semantic_probe(config, run_name="recovered", recompute_native=True)
+                self.assertEqual(recovered["aggregate"], summary["aggregate"])
+                self.assertFalse(recovered["original_native_arrays_verified"])
+                self.assertEqual(recovered["earlier_C1_reproduced_folds"], [0,1,2,3])
+                calls = fake.calls
+                self.assertEqual(recovered, run_semantic_probe(config, run_name="recovered", recompute_native=True))
+                self.assertEqual(calls, fake.calls)
+                self.assertFalse(list((output/"cache").glob("*.npz")))
+                reference = output/"fold-0/seed-42/result-cam.json"
+                original_reference = reference.read_bytes()
+                altered = read_json(reference)
+                altered["cam"]["C1"]["site_rows"][0]["ap"] = 0.123
+                write_json(reference, altered)
+                with self.assertRaisesRegex(ValueError, "Recomputed C1 differs"):
+                    run_semantic_probe(config, run_name="bad-reference", recompute_native=True)
+                reference.write_bytes(original_reference)
+                metadata_path = next((output/"diagnostics/recovered/raw").glob("*.json"))
                 metadata = read_json(metadata_path)
                 metadata["sha256"] = "tampered"
                 write_json(metadata_path, metadata)
                 with self.assertRaisesRegex(ValueError, "integrity mismatch"):
-                    run_semantic_probe(config)
+                    run_semantic_probe(config, run_name="recovered", recompute_native=True)
 
 
 if __name__ == "__main__":

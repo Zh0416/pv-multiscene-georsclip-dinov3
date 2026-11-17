@@ -185,7 +185,7 @@ def _previews(config: Config, records: list[dict], manifest_rows: dict, predicti
     return exported
 
 
-def run_semantic_probe(config: Config, *, run_name: str = "e05-native224-v1") -> dict:
+def run_semantic_probe(config: Config, *, run_name: str = "e05-native224-v1", recompute_native: bool = False) -> dict:
     if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}", run_name):
         raise ValueError("Use a short alphanumeric run name")
     root = config.output_dir
@@ -201,6 +201,10 @@ def run_semantic_probe(config: Config, *, run_name: str = "e05-native224-v1") ->
                 "georsclip_dense": "native patch tokens, bicubic 7x7 positional interpolation to 16x16"}
     if config.augmentation != "none" or any(cache_identity.get(k) != v for k,v in expected.items()):
         raise ValueError("Existing cache does not match the registered native semantic baseline")
+    references = {str(f): root / f"fold-{f}/seed-42/result-cam.json" for f in range(4)}
+    if recompute_native and not all(p.is_file() for p in references.values()):
+        raise ValueError("Recomputing native scores requires all four original seed-42 CAM reports; restore the E05 recovery bundle")
+    baseline_source = "recomputed_from_checkpoint_verified_against_original_C1_metrics" if recompute_native else "original_feature_cache"
     runtime = _runtime(config.device)
     print(f"E05: {len(ids)} development images; loading GeoRSCLIP only", flush=True)
     geo = GeoRSCLIP(config.georsclip_weights, config.georsclip_sha256, config.device)
@@ -208,6 +212,8 @@ def run_semantic_probe(config: Config, *, run_name: str = "e05-native224-v1") ->
         raise ValueError("OpenCLIP version differs from the original cache; restore that version first")
     rows = {r["id"]: r for r in manifest["images"]}
     identity = {"protocol": PROTOCOL, "runtime": runtime, "open_clip_version": geo.open_clip_version,
+        "native_baseline_source": baseline_source,
+        "original_C1_report_sha256": {f: sha256(p) for f,p in references.items() if p.is_file()},
         "georsclip_sha256": geo.checkpoint_sha256, "cache_identity": cache_identity,
         "manifest_sha256": sha256(root / "dataset_manifest.json"), "split_sha256": sha256(root / "split_lock.json"),
         "native_entries": {i: index["entries"][i] for i in ids},
@@ -227,7 +233,9 @@ def run_semantic_probe(config: Config, *, run_name: str = "e05-native224-v1") ->
         label_path = _checked_input_path(config.label_dir, image_id)
         if sha256(image_path) != row["image_sha256"] or sha256(label_path) != row["label_sha256"]:
             raise ValueError(f"Input changed after audit: {image_id}")
-        native, native_global = _cached_native(config, row, index["entries"][image_id])
+        if index["entries"][image_id]["image_sha256"] != row["image_sha256"]:
+            raise ValueError("Original cache index and manifest image hashes differ")
+        native, native_global = (None, None) if recompute_native else _cached_native(config, row, index["entries"][image_id])
         stem = hashlib.sha256(image_id.encode("utf-8")).hexdigest()[:24]
         raw_path, metadata_path = raw_folder / f"{stem}.npz", raw_folder / f"{stem}.json"
         if metadata_path.exists():
@@ -236,6 +244,9 @@ def run_semantic_probe(config: Config, *, run_name: str = "e05-native224-v1") ->
                 raise ValueError("Diagnostic raw-map integrity mismatch")
             with np.load(raw_path, allow_pickle=False) as archive:
                 sliding = archive["sliding224"].copy()
+                if recompute_native:
+                    native = archive["native512"].copy()
+                    native_global = float(archive["global_raw"])
             print(f"[{number}/{len(ids)}] reuse {image_id}", flush=True)
         else:
             with rasterio.open(image_path) as image:
@@ -255,19 +266,26 @@ def run_semantic_probe(config: Config, *, run_name: str = "e05-native224-v1") ->
                     peaks[mode] = max(peaks.get(mode) or 0, peak or 0) if peak is not None else None
                     if mode == "native512":
                         fresh, global_score = value
-                        if not np.allclose(fresh[0,0].cpu().numpy(), native, rtol=1e-4, atol=1e-5) or not np.isclose(float(global_score[0]), native_global, rtol=1e-4, atol=1e-5):
-                            raise ValueError("Fresh native/CLS output differs from original cache; investigate baseline before E05")
+                        if native is None:
+                            native = fresh[0,0].cpu().numpy().copy()
+                            native_global = float(global_score[0])
+                        elif not np.allclose(fresh[0,0].cpu().numpy(), native, rtol=1e-4, atol=1e-5) or not np.isclose(float(global_score[0]), native_global, rtol=1e-4, atol=1e-5):
+                            origin = "repeat inference" if recompute_native else "original cache"
+                            raise ValueError(f"Fresh native/CLS output differs from {origin}; investigate baseline before E05")
                     else:
                         sliding = value[0,0].cpu().numpy().copy()
             temporary = raw_path.with_suffix(".tmp.npz")
-            np.savez_compressed(temporary, sliding224=sliding)
+            np.savez_compressed(temporary, sliding224=sliding, native512=native, global_raw=np.float32(native_global))
             temporary.replace(raw_path)
             metadata = {"image_id": image_id, "sha256": sha256(raw_path), "seconds": durations,
-                        "cuda_peak_allocated_bytes": peaks, "fresh_native_and_global_match_original_cache": True}
+                        "cuda_peak_allocated_bytes": peaks, "native_baseline_source": baseline_source,
+                        "fresh_native_and_global_match_original_cache": None if recompute_native else True}
             _atomic_json(metadata_path, metadata)
             print(f"[{number}/{len(ids)}] extracted {image_id}", flush=True)
         if sliding.shape != (32,32) or not np.isfinite(sliding).all():
             raise ValueError("Invalid sliding score map")
+        if native.shape != (32,32) or not np.isfinite(native).all() or not np.isfinite(native_global):
+            raise ValueError("Invalid native score map")
         with rasterio.open(label_path) as label:
             mask = label.read(1).astype(np.float32)
         records.append({"id": image_id, "site": split["assignment"][image_id]["site"], "mask": mask,
@@ -292,6 +310,8 @@ def run_semantic_probe(config: Config, *, run_name: str = "e05-native224-v1") ->
                         raise ValueError("Recomputed C1 differs from earlier CAM result")
             baseline_checks.append(fold["fold"])
         _atomic_json(folder / f"fold-{fold['fold']}.json", fold)
+    if recompute_native and baseline_checks != list(range(4)):
+        raise ValueError("Recovery requires reproducing all four original C1 reports")
     medians = {m: [float(np.median(t["seconds"][m])) for t in timings] for m in ("native512", "sliding224")}
     ratio = float(np.mean(medians["sliding224"]) / np.mean(medians["native512"]))
     ratios = [b/a for a,b in zip(medians["native512"],medians["sliding224"])]
@@ -300,6 +320,8 @@ def run_semantic_probe(config: Config, *, run_name: str = "e05-native224-v1") ->
     summary.update({"schema": PROTOCOL["schema"], "status": "development_semantic_probe_complete",
         "protocol": PROTOCOL, "runtime": runtime, "identity_sha256": sha256(identity_path),
         "development_images": len(ids), "earlier_C1_reproduced_folds": baseline_checks,
+        "native_baseline_source": baseline_source,
+        "original_native_arrays_verified": not recompute_native,
         "timing": {"mean_seconds_per_image": {m:float(np.mean(v)) for m,v in medians.items()},
                    "sliding_to_native_ratio_of_means": ratio,
                    "per_image_ratio_p50_p95_max": [float(v) for v in np.quantile(ratios,[0.5,0.95,1])]},
