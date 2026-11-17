@@ -9,7 +9,7 @@ import rasterio
 import torch
 
 from .config import Config
-from .encoders import NEGATIVE_CLASSES, POSITIVE_PROMPTS, load_encoders
+from .encoders import GEOMETRIES, NEGATIVE_CLASSES, POSITIVE_PROMPTS, load_encoders
 from .io import read_json, sha256, write_json
 
 PREPROCESS_VERSION = "rgb-uint8-clip-openai-sat493m-v1"
@@ -53,7 +53,8 @@ def build_cache(config: Config, manifest: dict, ids: list[str] | None = None) ->
                 "preprocess": PREPROCESS_VERSION, "augmentation": config.augmentation,
                 "dino_layers": list(dino.layer_indices),
                 "dino_reduction": "get_intermediate_layers(n=4,reshape=True,norm=True), arithmetic mean",
-                "georsclip_dense": "native patch tokens, bicubic 7x7 positional interpolation to 16x16",
+                "georsclip_model": config.georsclip_model,
+                "georsclip_dense": geo.geometry.dense_description,
                 "prompts_positive": POSITIVE_PROMPTS, "prompts_negative": NEGATIVE_CLASSES}
     entries = {}
     for image_id in selected:
@@ -83,6 +84,8 @@ def load_feature(config: Config, manifest: dict, index: dict, image_id: str) -> 
     if (index["identity"]["preprocess"] != PREPROCESS_VERSION or
         index["identity"]["augmentation"] != config.augmentation or
         index["identity"]["georsclip_sha256"] != config.georsclip_sha256 or
+        index["identity"].get("georsclip_model", "ViT-B/32") != config.georsclip_model or
+        index["identity"].get("georsclip_dense", GEOMETRIES["ViT-B/32"].dense_description) != GEOMETRIES[config.georsclip_model].dense_description or
         not index["identity"]["dinov3_sha256"].startswith(config.dinov3_sha256_prefix) or
         entry["image_sha256"] != row["image_sha256"]):
         raise ValueError("Cache provenance mismatch")

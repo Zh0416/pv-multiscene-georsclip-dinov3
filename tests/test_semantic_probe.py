@@ -14,11 +14,12 @@ from torch.nn import functional as F
 
 from pvstudy.cache import PREPROCESS_VERSION
 from pvstudy.config import Config
-from pvstudy.encoders import GeoRSCLIP, NEGATIVE_CLASSES, POSITIVE_PROMPTS
+from pvstudy.encoders import GEOMETRIES, GeoRSCLIP, NEGATIVE_CLASSES, POSITIVE_PROMPTS
 from pvstudy.io import read_json, sha256, write_json
 from pvstudy.priors import area_target, fit_patch
 from pvstudy.semantic_probe import _check_split, evaluate_folds, run_semantic_probe
 from pvstudy.hard_negative_probe import evaluate_e03, run_hard_negative_probe
+from pvstudy.l14_probe import run_l14_probe
 from pvstudy.semantic_extensions import evaluate_extension, run_extension
 
 
@@ -38,9 +39,9 @@ class FakeGeo:
         self.calls += 1
         return F.avg_pool2d(rgb[:, :1].float()/255, 16) - 0.35
 
-    def encode_semantic_pair(self, rgb, *, sliding224=False):
+    def encode_semantic_pair(self, rgb, *, sliding_native=False, sliding224=False):
         self.calls += 1
-        full = F.avg_pool2d(rgb[:, :1].float()/255, 16) - (0.35 if sliding224 else 0.4)
+        full = F.avg_pool2d(rgb[:, :1].float()/255, 16) - (0.35 if sliding_native or sliding224 else 0.4)
         return full, full + 0.1
 
     def encode_last_block_pair(self, rgb, *, mode="both"):
@@ -93,6 +94,49 @@ class SemanticProbeTests(unittest.TestCase):
         self.assertTrue(torch.equal(global_before, global_after))
         with self.assertRaisesRegex(ValueError, "one RGB512"):
             geo.encode_sliding224(rgb.expand(2, -1, -1, -1))
+
+    def test_l14_padded_grid_and_native_windows_agree(self):
+        geo = object.__new__(GeoRSCLIP)
+        geo.device = "cpu"
+        geo.geometry = GEOMETRIES["ViT-L-14-336"]
+        geo.model = nn.Identity().eval().requires_grad_(False)
+        geo.text_positive = F.one_hot(torch.tensor(0), 768).float()
+        geo.text_negative = F.one_hot(torch.tensor([1]), 768).float()
+        seen = []
+
+        def tokens(x):
+            seen.append(tuple(x.shape))
+            patches = F.avg_pool2d(x[:, :1], 14).flatten(1)
+            result = torch.zeros(x.shape[0], patches.shape[1] + 1, 768)
+            result[:, 1:, 0] = patches
+            result[:, :, 1] = 1
+            return result
+
+        geo._tokens = tokens
+        gradient = torch.arange(512, dtype=torch.uint8)[None, None, None, :].expand(1, 3, 512, 512)
+        native, _ = geo.encode(gradient)
+        sliding = geo.encode_sliding_native(gradient)
+        self.assertEqual(seen[0], (1, 3, 518, 518))
+        self.assertEqual(len(seen), 6)
+        self.assertTrue(all(shape[2:] == (336, 336) for shape in seen[1:]))
+        self.assertEqual(tuple(native.shape), (1, 1, 32, 32))
+        self.assertTrue(torch.allclose(native, sliding, atol=1e-6))
+        with self.assertRaisesRegex(ValueError, "encode_sliding_native"):
+            geo.encode_sliding224(gradient)
+
+        class CLSModel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.batches = []
+
+            def encode_image(self, x):
+                self.batches.append(tuple(x.shape))
+                return F.pad(x.mean(dim=(2, 3)), (0, 765))
+
+        geo.model = CLSModel().eval().requires_grad_(False)
+        cls = geo.encode_window_cls(gradient)
+        self.assertEqual(tuple(cls.shape), (1, 1, 32, 32))
+        self.assertEqual(geo.model.batches, [(7, 3, 336, 336)] * 7)
 
     def test_e04_last_block_and_e08_window_encoder_shapes(self):
         class Attention(nn.Module):
@@ -161,6 +205,44 @@ class SemanticProbeTests(unittest.TestCase):
         self.assertTrue(torch.equal(cls, geo.encode_window_cls(rgb)))
         with self.assertRaisesRegex(ValueError, "one RGB512"):
             geo.encode_window_cls(rgb.expand(2, -1, -1, -1))
+
+    def test_l14_e04_supports_openclip_multihead_attention(self):
+        class LastBlock(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.ln_1, self.ln_2 = nn.LayerNorm(1024), nn.LayerNorm(1024)
+                self.attn = nn.MultiheadAttention(1024, 16)
+                self.mlp = nn.Sequential(nn.Linear(1024, 1024), nn.GELU(), nn.Linear(1024, 1024))
+                self.ls_1, self.ls_2 = nn.Identity(), nn.Identity()
+
+        class Visual(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv1 = nn.Conv2d(3, 1024, 14, 14, bias=False)
+                self.class_embedding = nn.Parameter(torch.zeros(1024))
+                self.positional_embedding = nn.Parameter(torch.randn(577, 1024) * 0.01)
+                self.ln_pre, self.ln_post = nn.LayerNorm(1024), nn.LayerNorm(1024)
+                self.proj = nn.Parameter(torch.randn(1024, 768) * 0.01)
+                self.transformer = nn.Module()
+                self.transformer.resblocks = nn.ModuleList([nn.Identity() for _ in range(23)] + [LastBlock()])
+
+        class Model(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.visual = Visual()
+
+        geo = object.__new__(GeoRSCLIP)
+        geo.device = "cpu"
+        geo.geometry = GEOMETRIES["ViT-L-14-336"]
+        geo._sequence_first = True
+        geo.model = Model().eval().requires_grad_(False)
+        geo.text_positive = F.normalize(torch.randn(768), dim=0)
+        geo.text_negative = F.normalize(torch.randn(2, 768), dim=-1)
+        result = geo.encode_last_block_pair(torch.zeros(1, 3, 512, 512, dtype=torch.uint8))
+        self.assertEqual(set(result), {"value_only", "vv"})
+        for full, positive in result.values():
+            self.assertEqual(tuple(full.shape), (1, 1, 32, 32))
+            self.assertTrue(torch.isfinite(full).all() and torch.isfinite(positive).all())
 
     def _records(self):
         records = []
@@ -266,6 +348,53 @@ class SemanticProbeTests(unittest.TestCase):
         self.assertIn("E04_replacement_pass", summary["comparisons"]["vv_full"])
         with self.assertRaisesRegex(ValueError, "exactly the locked development"):
             evaluate_extension(records + [{**records[0], "id": "sealed.tif"}], split, modes)
+
+    def test_l14_diagnostic_isolated_and_resumable(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image_dir, label_dir, output = root / "images", root / "labels", root / "l14-output"
+            for path in (image_dir, label_dir, output):
+                path.mkdir()
+            records, split = self._records()
+            rows = []
+            for record in records:
+                image_id = record["id"]
+                rgb = np.repeat((record["mask"] * 255).astype(np.uint8)[None], 3, axis=0)
+                for path, data in ((image_dir / image_id, rgb),
+                                   (label_dir / image_id, record["mask"][None].astype(np.uint8))):
+                    with rasterio.open(path, "w", driver="GTiff", height=512, width=512,
+                                       count=data.shape[0], dtype="uint8",
+                                       transform=from_origin(112, 22, 0.001, 0.001),
+                                       crs=CRS.from_epsg(4326).to_wkt()) as target:
+                        target.write(data)
+                rows.append({"id": image_id, "image_sha256": sha256(image_dir / image_id),
+                             "label_sha256": sha256(label_dir / image_id),
+                             "target_fraction": float(record["mask"].mean())})
+            rows.append({"id": "sealed.tif", "image_sha256": "unread", "label_sha256": "unread",
+                         "target_fraction": 0})
+            write_json(output / "dataset_manifest.json", {
+                "manual_qc_confirmed": True, "manual_qc_sha256": "qc", "images": rows})
+            write_json(output / "split_lock.json", split)
+            config = Config(image_dir, label_dir, root / "geo.pt", root / "dino.pth",
+                            root / "source", output, device="cpu", georsclip_sha256="fixture",
+                            georsclip_model="ViT-L-14-336")
+            fake = FakeGeo()
+            with patch("pvstudy.l14_probe.GeoRSCLIP", return_value=fake):
+                summary = run_l14_probe(config)
+                calls = fake.calls
+                self.assertEqual(summary, run_l14_probe(config))
+                self.assertEqual(fake.calls, calls)
+            self.assertEqual(summary["development_images"], 8)
+            self.assertIn("window_cls_vs_e05_positive_only", summary["comparisons"])
+            self.assertTrue((output / "diagnostics/l14-semantic-v1/l14_review.zip").is_file())
+            self.assertFalse((output / "cache").exists())
+            meta_path = next((output / "diagnostics/l14-semantic-v1/raw").glob("*.json"))
+            altered = read_json(meta_path)
+            altered["sha256"] = "wrong"
+            write_json(meta_path, altered)
+            with patch("pvstudy.l14_probe.GeoRSCLIP", return_value=fake):
+                with self.assertRaisesRegex(ValueError, "integrity mismatch"):
+                    run_l14_probe(config)
 
     def test_isolated_probe_resume_and_input_integrity(self):
         with tempfile.TemporaryDirectory() as temporary:

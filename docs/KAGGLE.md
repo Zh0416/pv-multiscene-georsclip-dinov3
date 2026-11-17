@@ -1,6 +1,12 @@
 # Kaggle execution
 
-`config.kaggle.json` records the Kaggle checkpoint and image paths supplied
+This page records the original B/32 experiment. Its configuration is now
+`config.kaggle.b32.json`. For the new GeoRSCLIP ViT-L/14-336 checkpoint and
+isolated output, follow [L/14-336 Kaggle run](L14_336.md).
+Existing B/32 diagnostics record code hashes and may reject resuming after
+this encoder update; use the original commit for exact historical replay.
+
+`config.kaggle.b32.json` records the original Kaggle checkpoint and image paths supplied
 by the dataset owner, plus the confirmed sibling label directory:
 
 ```text
@@ -41,37 +47,37 @@ marks it as not Git-verified, and hashes every mounted `dinov3/*.py` file.
 1. Place a writable copy of this repository under `/kaggle/working`, install
    a CUDA PyTorch build compatible with the Kaggle GPU, then run
    `pip install -e .` from that copy. With Kaggle Internet enabled, run
-   `pvstudy --config config.kaggle.json prepare-source`; it clones the official
+   `pvstudy --config config.kaggle.b32.json prepare-source`; it clones the official
    DINOv3 repository and checks out commit
    `6876159a11b4df116f30f667f8c9888617df0751`. If Internet is disabled,
    mount that pinned source as a Kaggle dataset and change `dinov3_source` to
    the mounted folder. An existing checkout at a different commit is rejected.
-2. Run `pvstudy --config config.kaggle.json audit`. Inspect representative positive,
+2. Run `pvstudy --config config.kaggle.b32.json audit`. Inspect representative positive,
    negative, smallest-target and difficult-background overlays. Resolve any
    near duplicate or scene relation and rerun with `--manual-groups` if needed.
-3. Run `pvstudy --config config.kaggle.json export-qc`. Download and open
+3. Run `pvstudy --config config.kaggle.b32.json export-qc`. Download and open
    `/kaggle/working/pvstudy/qc/qc_review.html` in a browser, review all images,
    investigate scene relationships, and export the actual `QC.json`.
    Follow [the quality review guide](QUALITY_REVIEW.md), then run
-   `pvstudy --config config.kaggle.json lock-split --qc-file QC.json`.
+   `pvstudy --config config.kaggle.b32.json lock-split --qc-file QC.json`.
    For the user-confirmed 2026-11-17 correction of five mistaken issue flags,
    the private repository includes `protocol/QC.confirmed-20261117.json`.
    On the unchanged provisional manifest/split, use that file as `--qc-file`;
    its provenance and remaining source-scene limitation are documented in
    `protocol/README.md`. Do not use it after changing masks or split assignments.
-4. Run `pvstudy --config config.kaggle.json verify-encoders --id '正样本/PV-01.tif'`.
+4. Run `pvstudy --config config.kaggle.b32.json verify-encoders --id '正样本/PV-01.tif'`.
    It checks strict weight loading, the 224 native GeoRSCLIP CLS identity,
    512 dense shapes, DINO
    four-layer output, determinism, finiteness and freeze state. Semantic
    ranking and calibration still require development data evaluation.
-5. Run `pvstudy --config config.kaggle.json cache`. This writes only development
+5. Run `pvstudy --config config.kaggle.b32.json cache`. This writes only development
    features; the cache index binds image/checkpoint/source hashes, prompts,
    preprocessing and augmentation.
 6. For each fold 0-3 and seed 42-44, run
-   `pvstudy --config config.kaggle.json run-fold --fold F --seed S` once
+   `pvstudy --config config.kaggle.b32.json run-fold --fold F --seed S` once
    to fit the CAM stage. Then run supported `--variant` values using the same
    fold/seed and hyperparameters. The later runs load the fixed CAM maps.
-7. Run `pvstudy --config config.kaggle.json summarize-dev`. Missing fold/seed
+7. Run `pvstudy --config config.kaggle.b32.json summarize-dev`. Missing fold/seed
    files yield `incomplete`. Use its G2-G5 checks only after G1 and manual QC
    have passed.
 

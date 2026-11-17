@@ -83,3 +83,29 @@ def restore_e05(source: Path, output: Path) -> dict:
             "output_dir": str(output), "files": len(payload),
             "feature_arrays_restored": False,
             "next_command": "diagnose-semantic --recompute-native --run-name e05-recovered-native-v1"}
+
+
+def reuse_locked_split(source: Path, output: Path) -> dict:
+    """Copy only the audited lock into a new model-specific output directory."""
+    names = ("dataset_manifest.json", "split_lock.json")
+    if source.is_file() or (source / RECOVERY_INFO).is_file():
+        _, bundle = read_bundle(source)
+        payload = {name: bundle[name] for name in names}
+    else:
+        payload = {name: (source / name).read_bytes() for name in names}
+    manifest, split = (json.loads(payload[name]) for name in names)
+    _check_split(manifest, split)
+    for name, data in payload.items():
+        target = output / name
+        if target.exists() and target.read_bytes() != data:
+            raise ValueError(f"Existing lock differs; preserved: {target}")
+    for name, data in payload.items():
+        target = output / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if not target.exists():
+            temporary = target.with_suffix(".lock.tmp")
+            temporary.write_bytes(data)
+            temporary.replace(target)
+    return {"status": "locked_split_reused", "source": str(source), "output_dir": str(output),
+            "manifest_sha256": hashlib.sha256(payload[names[0]]).hexdigest(),
+            "split_sha256": hashlib.sha256(payload[names[1]]).hexdigest()}

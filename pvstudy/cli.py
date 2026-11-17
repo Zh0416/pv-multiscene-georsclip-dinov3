@@ -10,6 +10,7 @@ import torch
 from .cache import _source_identity, build_cache
 from .analysis import development_gates
 from .config import Config
+from .encoders import GEOMETRIES
 from .data import build_manifest
 from .encoders import load_encoders
 from .experiment import run_fold
@@ -22,7 +23,7 @@ from .qc import export_qc, validate_qc
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="pvstudy")
     p.add_argument("--config", type=Path, default=Path("config.json"))
-    for name in ("image-dir", "label-dir", "georsclip-weights", "dinov3-weights", "dinov3-source", "output-dir", "device"):
+    for name in ("image-dir", "label-dir", "georsclip-weights", "georsclip-model", "dinov3-weights", "dinov3-source", "output-dir", "device"):
         p.add_argument("--" + name)
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("prepare-source", help="Get the pinned official DINOv3 source checkout")
@@ -56,18 +57,24 @@ def parser() -> argparse.ArgumentParser:
         extension = sub.add_parser(command, help=help_text)
         extension.add_argument("--e03-run-name", default="e03-no-hard-negatives-v1")
         extension.add_argument("--run-name")
+    l14 = sub.add_parser("diagnose-l14", help="Independent L/14-336 development semantic comparison")
+    l14.add_argument("--run-name", default="l14-semantic-v1")
     restore = sub.add_parser("restore-e05", help="Restore locked E05 reference JSONs from a recovery ZIP or mounted directory")
     restore.add_argument("--source", type=Path, required=True)
+    reuse = sub.add_parser("reuse-lock", help="Copy the existing locked manifest and split to a new model output")
+    reuse.add_argument("--source", type=Path, required=True)
     return p
 
 
 def _config(args) -> Config:
     config = Config.load(args.config)
     overrides = {}
-    for name in ("image_dir", "label_dir", "georsclip_weights", "dinov3_weights", "dinov3_source", "output_dir", "device"):
+    for name in ("image_dir", "label_dir", "georsclip_weights", "georsclip_model", "dinov3_weights", "dinov3_source", "output_dir", "device"):
         value = getattr(args, name)
         if value is not None:
-            overrides[name] = value if name == "device" else Path(value).resolve()
+            overrides[name] = value if name in ("device", "georsclip_model") else Path(value).resolve()
+    if overrides.get("georsclip_model", config.georsclip_model) not in GEOMETRIES:
+        raise ValueError("Unsupported GeoRSCLIP architecture")
     return replace(config, **overrides)
 
 
@@ -124,6 +131,9 @@ def main(argv: list[str] | None = None) -> None:
             raise RuntimeError("G1 non-deterministic encoder output")
         info = {"status": "interface_pass_semantic_quality_unverified", "image_id": args.id,
                 "georsclip_checkpoint_sha256": geo.checkpoint_sha256,
+                "georsclip_model": config.georsclip_model,
+                "georsclip_native_input": geo.geometry.native,
+                "georsclip_dense_grid": geo.geometry.dense_grid,
                 "dinov3_checkpoint_sha256": dino.checkpoint_sha256,
                 "dinov3_source": _source_identity(config.dinov3_source, config.dinov3_source_commit),
                 "dinov3_layers": list(dino.layer_indices),
@@ -154,18 +164,31 @@ def main(argv: list[str] | None = None) -> None:
         write_json(output / "development_gates.json", result)
         print(result["status"])
     elif args.command == "diagnose-semantic":
+        if config.georsclip_model != "ViT-B/32":
+            raise ValueError("Legacy E05 requires B/32; use diagnose-l14 for the new checkpoint")
         from .semantic_probe import run_semantic_probe
         run_semantic_probe(config, run_name=args.run_name, recompute_native=args.recompute_native)
     elif args.command == "diagnose-hard-negatives":
+        if config.georsclip_model != "ViT-B/32":
+            raise ValueError("Legacy E03 requires B/32; use diagnose-l14 for the new checkpoint")
         from .hard_negative_probe import run_hard_negative_probe
         run_hard_negative_probe(config, e05_run_name=args.e05_run_name, run_name=args.run_name)
     elif args.command in ("diagnose-e04", "diagnose-window-cls"):
+        if config.georsclip_model != "ViT-B/32":
+            raise ValueError("Legacy E04/E08 references require B/32; use diagnose-l14")
         from .semantic_extensions import run_extension
         method = "e04" if args.command == "diagnose-e04" else "e08"
         run_extension(config, method=method, e03_run_name=args.e03_run_name, run_name=args.run_name)
+    elif args.command == "diagnose-l14":
+        from .l14_probe import run_l14_probe
+
+        run_l14_probe(config, run_name=args.run_name)
     elif args.command == "restore-e05":
         from .recovery import restore_e05
         print(restore_e05(args.source, output))
+    elif args.command == "reuse-lock":
+        from .recovery import reuse_locked_split
+        print(reuse_locked_split(args.source, output))
 
 
 if __name__ == "__main__":

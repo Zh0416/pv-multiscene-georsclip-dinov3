@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from zipfile import ZipFile
 
-from pvstudy.recovery import RECOVERY_FILES, RECOVERY_INFO, RECOVERY_SCHEMA, restore_e05
+from pvstudy.recovery import RECOVERY_FILES, RECOVERY_INFO, RECOVERY_SCHEMA, restore_e05, reuse_locked_split
 
 
 class RecoveryTests(unittest.TestCase):
@@ -68,6 +68,23 @@ class RecoveryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "checksum mismatch"):
                 restore_e05(source, output)
             self.assertFalse(output.exists())
+
+    def test_reuse_lock_preserves_exact_bytes_and_refuses_different_lock(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "old"
+            source.mkdir()
+            files, _ = self._payload()
+            for name in RECOVERY_FILES[:2]:
+                (source / name).write_bytes(files[name])
+            target = root / "new"
+            self.assertEqual(reuse_locked_split(source, target)["status"], "locked_split_reused")
+            for name in RECOVERY_FILES[:2]:
+                self.assertEqual((target / name).read_bytes(), files[name])
+            self.assertEqual(reuse_locked_split(source, target)["status"], "locked_split_reused")
+            (target / "split_lock.json").write_text("different", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "preserved"):
+                reuse_locked_split(source, target)
 
 
 if __name__ == "__main__":

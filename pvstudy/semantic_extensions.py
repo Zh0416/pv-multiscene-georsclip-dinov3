@@ -101,7 +101,7 @@ def evaluate_extension(records: list[dict], split: dict, modes: list[str]) -> tu
             "ap": paired_site_bootstrap(left, right),
             "negative_fp_delta": aggregate[mode]["negative_fp"] - aggregate[reference]["negative_fp"],
             "fold_ap_deltas": [f["metrics"][mode]["site_macro_ap"] - f["metrics"][reference]["site_macro_ap"] for f in folds]}
-        if mode.endswith("_full"):
+        if mode in ("value_only_full", "vv_full"):
             comparisons[mode]["E04_replacement_pass"] = (
                 comparisons[mode]["ap"]["mean_delta"] >= 0.01 and
                 comparisons[mode]["negative_fp_delta"] <= 0.005)
