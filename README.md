@@ -22,6 +22,12 @@ cache, loads only GeoRSCLIP, and writes a compact review bundle without
 retraining or replacing the existing CAM/decoder results. See
 [E05 Kaggle instructions](docs/E05.md).
 
+The follow-up E03 command `pvstudy --config config.kaggle.json
+diagnose-hard-negatives` uses the completed E05 raw maps as the full-text
+reference and fits separate four-fold calibrators for positive-only text
+scores. It compares both fixed geometries without modifying earlier results.
+See [E03 Kaggle instructions](docs/E03.md).
+
 ## Setup
 
 Use Python 3.9+ and a CUDA PyTorch build for real encoder runs. In Kaggle,

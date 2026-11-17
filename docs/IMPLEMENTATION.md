@@ -9,6 +9,7 @@
 | G4/G5 | `models.py`, `experiment.py` | S2-S7, S11, S13, S14 with identical decoder capacity; M channel and optional local M attention bias |
 | Analysis | `metrics.py`, `analysis.py` | Site macro AP/Dice/IoU, negative FP, area Brier/ECE/MAE, paired site bootstrap helper, G2-G5 development checks |
 | E05 diagnostic | `semantic_probe.py`, `GeoRSCLIP.encode_sliding224` | Isolated native512/native224 sliding comparison, four outer-fold calibrations, paired site statistics, synchronized GPU timing, resumable raw maps and review previews; no main-pipeline replacement |
+| E03 diagnostic | `hard_negative_probe.py`, `GeoRSCLIP.encode_semantic_pair` | Full hard-negative score versus positive-only cosine on identical native512 geometry, with sliding224 as E05 follow-up; separate outer-fold calibrations and E05 baseline verification |
 
 Registered items **not yet implemented**: GeoRSCLIP value-only/true V-V,
 promotion of the E05 sliding path into the full training pipeline; random-text C8/S12; S0/S1,

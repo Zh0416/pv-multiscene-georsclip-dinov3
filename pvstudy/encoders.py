@@ -152,6 +152,45 @@ class GeoRSCLIP:
             raise RuntimeError("Sliding windows left uncovered patches")
         return F.interpolate(total / counts, size=(32, 32), mode="bilinear", align_corners=False)
 
+    @torch.no_grad()
+    def encode_semantic_pair(self, rgb: torch.Tensor, *, sliding224: bool = False) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return hard-negative margin and positive-only cosine on the same patch geometry."""
+        _frozen(self.model)
+        if rgb.shape != (1, 3, 512, 512):
+            raise ValueError("E03 expects one RGB512 image")
+        x = _normalize_rgb(rgb.to(self.device), CLIP_MEAN, CLIP_STD)
+        if sliding224:
+            locations = [(y, x0) for y in (0, 96, 192, 288) for x0 in (0, 96, 192, 288)]
+            total = torch.zeros((1, 2, 16, 16), device=x.device, dtype=torch.float32)
+            counts = torch.zeros((1, 1, 16, 16), device=x.device, dtype=torch.float32)
+            for start in range(0, len(locations), 4):
+                chunk = locations[start:start + 4]
+                crops = torch.cat([x[:, :, y:y + 224, x0:x0 + 224] for y, x0 in chunk])
+                features = F.normalize(self._tokens(crops).float(), dim=-1)
+                if features.shape != (len(chunk), 50, 512) or not torch.isfinite(features).all():
+                    raise RuntimeError("Invalid E03 sliding token layout")
+                positive = features @ self.text_positive
+                margin = positive - (features @ self.text_negative.T).amax(-1)
+                maps = torch.stack((margin[:, 1:], positive[:, 1:]), dim=1).reshape(len(chunk), 2, 7, 7)
+                for i, (y, x0) in enumerate(chunk):
+                    sy, sx = y // 32, x0 // 32
+                    total[0, :, sy:sy + 7, sx:sx + 7] += maps[i]
+                    counts[0, :, sy:sy + 7, sx:sx + 7] += 1
+            if not (counts > 0).all():
+                raise RuntimeError("E03 sliding windows left uncovered patches")
+            scores = total / counts
+        else:
+            features = F.normalize(self._tokens(x).float(), dim=-1)
+            if features.shape != (1, 257, 512) or not torch.isfinite(features).all():
+                raise RuntimeError("Invalid E03 native token layout")
+            positive = features @ self.text_positive
+            margin = positive - (features @ self.text_negative.T).amax(-1)
+            scores = torch.stack((margin[:, 1:], positive[:, 1:]), dim=1).reshape(1, 2, 16, 16)
+        scores = F.interpolate(scores, size=(32, 32), mode="bilinear", align_corners=False)
+        if not torch.isfinite(scores).all():
+            raise RuntimeError("Nonfinite E03 semantic scores")
+        return scores[:, :1], scores[:, 1:]
+
 
 class DinoSAT:
     def __init__(self, source: Path, weights: Path, expected_prefix: str, device: str):

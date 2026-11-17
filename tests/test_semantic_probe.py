@@ -18,6 +18,7 @@ from pvstudy.encoders import GeoRSCLIP, NEGATIVE_CLASSES, POSITIVE_PROMPTS
 from pvstudy.io import read_json, sha256, write_json
 from pvstudy.priors import area_target, fit_patch
 from pvstudy.semantic_probe import _check_split, evaluate_folds, run_semantic_probe
+from pvstudy.hard_negative_probe import evaluate_e03, run_hard_negative_probe
 
 
 class FakeGeo:
@@ -35,6 +36,11 @@ class FakeGeo:
     def encode_sliding224(self, rgb):
         self.calls += 1
         return F.avg_pool2d(rgb[:, :1].float()/255, 16) - 0.35
+
+    def encode_semantic_pair(self, rgb, *, sliding224=False):
+        self.calls += 1
+        full = F.avg_pool2d(rgb[:, :1].float()/255, 16) - (0.35 if sliding224 else 0.4)
+        return full, full + 0.1
 
 
 class SemanticProbeTests(unittest.TestCase):
@@ -62,8 +68,13 @@ class SemanticProbeTests(unittest.TestCase):
         rgb = grid[None, None].expand(1, 3, 512, 512).to(torch.uint8)
         native, global_before = geo.encode(rgb)
         sliding = geo.encode_sliding224(rgb)
+        pair_native = geo.encode_semantic_pair(rgb)
+        pair_sliding = geo.encode_semantic_pair(rgb, sliding224=True)
         self.assertTrue(torch.allclose(native, sliding, atol=1e-6))
-        self.assertEqual(seen_sizes[1:], [(4, 3, 224, 224)] * 4)
+        self.assertTrue(torch.allclose(pair_native[0], native, atol=1e-6))
+        self.assertTrue(torch.allclose(pair_sliding[0], sliding, atol=1e-6))
+        self.assertTrue(bool((pair_native[1] > pair_native[0]).all()))
+        self.assertEqual(seen_sizes[1:5], [(4, 3, 224, 224)] * 4)
         self.assertTrue(torch.isfinite(sliding).all())
         self.assertGreater(float(sliding[0,0,-1,-1]), float(sliding[0,0,0,0]))
         _, global_after = geo.encode(rgb)
@@ -117,6 +128,33 @@ class SemanticProbeTests(unittest.TestCase):
         bad["assignment"]["sealed.tif"]["site"] = "site-0"
         with self.assertRaisesRegex(ValueError, "Site crosses"):
             _check_split(manifest, bad)
+
+    def test_e03_recalibrates_each_text_mode_inside_outer_training_fold(self):
+        records, split = self._records()
+        for r in records:
+            r["native_full"] = r["native512"]
+            r["native_positive_only"] = r["native512"] + 0.1
+            r["sliding_full"] = r["sliding224"]
+            r["sliding_positive_only"] = r["sliding224"] + 0.1
+        calls = []
+
+        def spy(train, key):
+            calls.append(({r["id"] for r in train}, key))
+            return fit_patch(train, key)
+
+        with patch("pvstudy.hard_negative_probe.fit_patch", side_effect=spy):
+            summary, folds, predictions = evaluate_e03(records, split)
+        self.assertEqual(len(calls), 16)
+        self.assertEqual(set(predictions), {"constant", "native_full", "native_positive_only", "sliding_full", "sliding_positive_only"})
+        for fold in folds:
+            expected = set(fold["train_ids"])
+            for ids, mode in calls[4*fold["fold"]:4*fold["fold"]+4]:
+                self.assertEqual(ids, expected)
+                self.assertTrue(ids.isdisjoint(fold["validation_ids"]))
+            self.assertEqual(len(fold["calibrators"]), 4)
+        self.assertIn("native", summary["E03"])
+        with self.assertRaisesRegex(ValueError, "exactly the locked development"):
+            evaluate_e03(records + [{**records[0], "id": "sealed.tif"}], split)
 
     def test_isolated_probe_resume_and_input_integrity(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -182,6 +220,25 @@ class SemanticProbeTests(unittest.TestCase):
                 self.assertEqual(recovered, run_semantic_probe(config, run_name="recovered", recompute_native=True))
                 self.assertEqual(calls, fake.calls)
                 self.assertFalse(list((output/"cache").glob("*.npz")))
+                with patch("pvstudy.hard_negative_probe.GeoRSCLIP", return_value=fake):
+                    e03 = run_hard_negative_probe(config, e05_run_name="recovered")
+                    calls = fake.calls
+                    self.assertEqual(e03, run_hard_negative_probe(config, e05_run_name="recovered"))
+                    self.assertEqual(calls, fake.calls)
+                    self.assertEqual(e03["original_C1_reproduced_folds"], [0,1,2,3])
+                    self.assertEqual(e03["E05_full_text_reproduced_folds"], [0,1,2,3])
+                    self.assertTrue((output/"diagnostics/e03-no-hard-negatives-v1/e03_review.zip").is_file())
+                    for p, digest in originals.items():
+                        if p.exists():
+                            self.assertEqual(sha256(p), digest)
+                    e05_meta_path = next((output/"diagnostics/recovered/raw").glob("*.json"))
+                    e05_meta_original = e05_meta_path.read_bytes()
+                    e05_meta = read_json(e05_meta_path)
+                    e05_meta["sha256"] = "tampered"
+                    write_json(e05_meta_path, e05_meta)
+                    with self.assertRaisesRegex(ValueError, "E05 raw map integrity mismatch"):
+                        run_hard_negative_probe(config, e05_run_name="recovered")
+                    e05_meta_path.write_bytes(e05_meta_original)
                 reference = output/"fold-0/seed-42/result-cam.json"
                 original_reference = reference.read_bytes()
                 altered = read_json(reference)

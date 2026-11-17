@@ -48,6 +48,9 @@ def parser() -> argparse.ArgumentParser:
     probe = sub.add_parser("diagnose-semantic", help="Compare native512 and sliding224 GeoRSCLIP on locked development folds")
     probe.add_argument("--run-name", default="e05-native224-v1")
     probe.add_argument("--recompute-native", action="store_true", help="Rebuild only semantic scores when original feature arrays are lost; requires four original C1 reports")
+    hard_neg = sub.add_parser("diagnose-hard-negatives", help="E03: compare full versus positive-only semantic scores on locked development folds")
+    hard_neg.add_argument("--e05-run-name", default="e05-recovered-native-v1")
+    hard_neg.add_argument("--run-name", default="e03-no-hard-negatives-v1")
     restore = sub.add_parser("restore-e05", help="Restore locked E05 reference JSONs from a recovery ZIP or mounted directory")
     restore.add_argument("--source", type=Path, required=True)
     return p
@@ -148,6 +151,9 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "diagnose-semantic":
         from .semantic_probe import run_semantic_probe
         run_semantic_probe(config, run_name=args.run_name, recompute_native=args.recompute_native)
+    elif args.command == "diagnose-hard-negatives":
+        from .hard_negative_probe import run_hard_negative_probe
+        run_hard_negative_probe(config, e05_run_name=args.e05_run_name, run_name=args.run_name)
     elif args.command == "restore-e05":
         from .recovery import restore_e05
         print(restore_e05(args.source, output))
