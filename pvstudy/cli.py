@@ -10,9 +10,8 @@ import torch
 from .cache import _source_identity, build_cache
 from .analysis import development_gates
 from .config import Config
-from .encoders import GEOMETRIES
+from .encoders import GEOMETRIES, GeoRSCLIP, load_encoders
 from .data import build_manifest
-from .encoders import load_encoders
 from .experiment import run_fold
 from .io import read_json, sha256, write_json
 from .splits import build_split, partition_ids
@@ -34,6 +33,8 @@ def parser() -> argparse.ArgumentParser:
     lock.add_argument("--qc-file", type=Path, required=True)
     verify = sub.add_parser("verify-encoders", help="Run G1 deterministic shape and freeze checks")
     verify.add_argument("--id", required=True)
+    verify_geo = sub.add_parser("verify-georsclip", help="Verify GeoRSCLIP without loading DINOv3")
+    verify_geo.add_argument("--id", required=True)
     cache = sub.add_parser("cache", help="Cache frozen development-set features")
     cache.add_argument("--include-test", action="store_true")
     fold = sub.add_parser("run-fold", help="Train OOF CAMs and one decoder variant")
@@ -112,37 +113,50 @@ def main(argv: list[str] | None = None) -> None:
         write_json(output / "dataset_manifest.json", manifest)
         write_json(output / "split_lock.json", split)
         print("Split locked; test remains sealed until explicit final evaluation")
-    elif args.command == "verify-encoders":
+    elif args.command in ("verify-encoders", "verify-georsclip"):
         manifest = read_json(output / "dataset_manifest.json")
         rows = {r["id"]: r for r in manifest["images"]}
         if args.id not in rows or sha256(config.image_dir / args.id) != rows[args.id]["image_sha256"]:
             raise ValueError("Probe image missing or changed")
         with rasterio.open(config.image_dir / args.id) as image:
             rgb = torch.from_numpy(image.read().copy())[None]
-        geo, dino = load_encoders(config)
+        geo_only = args.command == "verify-georsclip"
+        if geo_only:
+            geo = GeoRSCLIP(config.georsclip_weights, config.georsclip_sha256,
+                            config.device, config.georsclip_model)
+        else:
+            geo, dino = load_encoders(config)
         with torch.no_grad():
             a, b = geo.encode(rgb)
-            c = dino.encode(rgb)
             a2, b2 = geo.encode(rgb)
-            c2 = dino.encode(rgb)
-        if a.shape != (1, 1, 32, 32) or b.shape != (1,) or c.shape != (1, 1024, 32, 32):
-            raise RuntimeError("G1 shape mismatch")
-        if not (torch.allclose(a, a2) and torch.allclose(b, b2) and torch.allclose(c, c2)):
-            raise RuntimeError("G1 non-deterministic encoder output")
-        info = {"status": "interface_pass_semantic_quality_unverified", "image_id": args.id,
+            if not geo_only:
+                c = dino.encode(rgb)
+                c2 = dino.encode(rgb)
+        if a.shape != (1, 1, 32, 32) or b.shape != (1,) or not torch.isfinite(a).all() or not torch.isfinite(b).all():
+            raise RuntimeError("GeoRSCLIP G1 shape or finite-value mismatch")
+        if not (torch.allclose(a, a2) and torch.allclose(b, b2)):
+            raise RuntimeError("GeoRSCLIP G1 non-deterministic encoder output")
+        if not geo_only:
+            if c.shape != (1, 1024, 32, 32) or not torch.isfinite(c).all():
+                raise RuntimeError("DINOv3 G1 shape or finite-value mismatch")
+            if not torch.allclose(c, c2):
+                raise RuntimeError("DINOv3 G1 non-deterministic encoder output")
+        info = {"status": "georsclip_interface_pass_dino_unverified" if geo_only else
+                            "interface_pass_semantic_quality_unverified", "image_id": args.id,
                 "georsclip_checkpoint_sha256": geo.checkpoint_sha256,
                 "georsclip_model": config.georsclip_model,
                 "georsclip_native_input": geo.geometry.native,
                 "georsclip_dense_grid": geo.geometry.dense_grid,
-                "dinov3_checkpoint_sha256": dino.checkpoint_sha256,
-                "dinov3_source": _source_identity(config.dinov3_source, config.dinov3_source_commit),
-                "dinov3_layers": list(dino.layer_indices),
                 "open_clip_version": geo.open_clip_version,
-                "semantic_shape": list(a.shape), "global_shape": list(b.shape), "dino_shape": list(c.shape),
+                "semantic_shape": list(a.shape), "global_shape": list(b.shape),
                 "device": config.device}
+        if not geo_only:
+            info.update({"dinov3_checkpoint_sha256": dino.checkpoint_sha256,
+                         "dinov3_source": _source_identity(config.dinov3_source, config.dinov3_source_commit),
+                         "dinov3_layers": list(dino.layer_indices), "dino_shape": list(c.shape)})
         if config.device.startswith("cuda"):
             info["cuda_peak_bytes"] = torch.cuda.max_memory_allocated()
-        write_json(output / "g1_encoder_probe.json", info)
+        write_json(output / ("g1_georsclip_probe.json" if geo_only else "g1_encoder_probe.json"), info)
         print(info)
     elif args.command == "cache":
         manifest = read_json(output / "dataset_manifest.json")

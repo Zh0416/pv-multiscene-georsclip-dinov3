@@ -59,6 +59,9 @@ class ProtocolTests(unittest.TestCase):
         path = Path(__file__).resolve().parents[1] / "config.kaggle.json"
         raw = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(raw["label_dir"], raw["image_dir"].rsplit("/", 1)[0] + "/labels")
+        self.assertEqual(raw["dinov3_weights"],
+                         "/kaggle/input/datasets/zh0416/dinov3-sat-geovit-l-14-336/"
+                         "dinov3_vitl16_pretrain_sat493m-eadcf0ff.pth")
         self.assertEqual(raw["dinov3_source_commit"], "6876159a11b4df116f30f667f8c9888617df0751")
         if os.name == "nt":
             with self.assertRaisesRegex(ValueError, "Linux Kaggle runtime"):

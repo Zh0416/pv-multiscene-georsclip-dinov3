@@ -13,6 +13,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from pvstudy.cache import PREPROCESS_VERSION
+from pvstudy.cli import main as cli_main
 from pvstudy.config import Config
 from pvstudy.encoders import GEOMETRIES, GeoRSCLIP, NEGATIVE_CLASSES, POSITIVE_PROMPTS
 from pvstudy.io import read_json, sha256, write_json
@@ -395,6 +396,33 @@ class SemanticProbeTests(unittest.TestCase):
             with patch("pvstudy.l14_probe.GeoRSCLIP", return_value=fake):
                 with self.assertRaisesRegex(ValueError, "integrity mismatch"):
                     run_l14_probe(config)
+
+    def test_geo_only_verification_does_not_load_missing_dino(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image_dir, label_dir, output = root / "images", root / "labels", root / "output"
+            for path in (image_dir, label_dir, output):
+                path.mkdir()
+            image_path = image_dir / "probe.tif"
+            with rasterio.open(image_path, "w", driver="GTiff", height=512, width=512,
+                               count=3, dtype="uint8", transform=from_origin(112, 22, 0.001, 0.001),
+                               crs=CRS.from_epsg(4326).to_wkt()) as image:
+                image.write(np.zeros((3, 512, 512), dtype=np.uint8))
+            write_json(output / "dataset_manifest.json", {
+                "images": [{"id": "probe.tif", "image_sha256": sha256(image_path)}]})
+            config_path = root / "config.json"
+            write_json(config_path, {"image_dir": str(image_dir), "label_dir": str(label_dir),
+                "georsclip_weights": str(root / "geo.pt"), "georsclip_model": "ViT-L-14-336",
+                "georsclip_sha256": "fixture", "dinov3_weights": str(root / "missing-dino.pth"),
+                "dinov3_source": str(root / "missing-source"), "output_dir": str(output), "device": "cpu"})
+            fake = FakeGeo()
+            fake.geometry = GEOMETRIES["ViT-L-14-336"]
+            with patch("pvstudy.cli.GeoRSCLIP", return_value=fake), \
+                 patch("pvstudy.cli.load_encoders", side_effect=AssertionError("DINO loaded")):
+                cli_main(["--config", str(config_path), "verify-georsclip", "--id", "probe.tif"])
+            info = read_json(output / "g1_georsclip_probe.json")
+            self.assertEqual(info["status"], "georsclip_interface_pass_dino_unverified")
+            self.assertNotIn("dinov3_checkpoint_sha256", info)
 
     def test_isolated_probe_resume_and_input_integrity(self):
         with tempfile.TemporaryDirectory() as temporary:

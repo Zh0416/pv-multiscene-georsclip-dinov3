@@ -3,7 +3,7 @@
   "label_dir": "/kaggle/input/datasets/zh0416/pv-100scence/PV-多场景/labels",
   "georsclip_weights": "/kaggle/input/datasets/zh0416/dinov3-sat-geovit-l-14-336/RS5M_ViT-L-14-336.pt",
   "georsclip_model": "ViT-L-14-336",
-  "dinov3_weights": "/kaggle/input/datasets/zh0416/pv-dinov3sat-encoder-checkpoints/dinov3_vitl16_pretrain_sat493m-eadcf0ff.pth",
+  "dinov3_weights": "/kaggle/input/datasets/zh0416/dinov3-sat-geovit-l-14-336/dinov3_vitl16_pretrain_sat493m-eadcf0ff.pth",
   "dinov3_source": "/kaggle/working/dinov3-source",
   "output_dir": "/kaggle/working/pvstudy-l14-336",
   "device": "cuda",
