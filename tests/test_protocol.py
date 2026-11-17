@@ -10,7 +10,7 @@ import torch
 
 from pvstudy.metrics import average_precision, paired_site_bootstrap, site_metrics
 from pvstudy.experiment import _load_prior_maps, _save_prior_maps, train_decoder, train_gate
-from pvstudy.models import Decoder, FusionGate, local_indices
+from pvstudy.models import Decoder, FusionGate, fusion_loss, local_indices
 from pvstudy.priors import area_target, fit_calibrator, fit_prior, site_weights
 from pvstudy.splits import partition_ids
 from pvstudy.source import prepare_dinov3_source
@@ -167,6 +167,17 @@ class ProtocolTests(unittest.TestCase):
                                       epochs=1, lr=1e-4, weight_decay=1e-4, device="cpu")
         self.assertEqual(info["best_epoch"], 1)
         self.assertIsInstance(decoder, Decoder)
+
+    def test_fusion_loss_is_safe_inside_autocast(self):
+        logits = torch.randn(1, 1, 8, 8, requires_grad=True)
+        target = torch.rand(1, 1, 8, 8)
+        with torch.autocast(device_type="cpu", dtype=torch.bfloat16):
+            low_precision_probability = torch.sigmoid(logits).to(torch.bfloat16)
+            loss = fusion_loss(low_precision_probability, target)
+        loss.backward()
+        self.assertEqual(loss.dtype, torch.float32)
+        self.assertTrue(torch.isfinite(loss))
+        self.assertTrue(torch.isfinite(logits.grad).all())
 
 
 if __name__ == "__main__":

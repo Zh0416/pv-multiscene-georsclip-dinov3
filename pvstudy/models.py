@@ -13,8 +13,11 @@ def soft_dice(probability: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
 
 
 def fusion_loss(probability: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-    clipped = probability.clamp(1e-6, 1 - 1e-6)
-    return F.binary_cross_entropy(clipped, target) + soft_dice(clipped, target)
+    with torch.autocast(device_type=probability.device.type, enabled=False):
+        probability = probability.float()
+        target = target.float()
+        clipped = probability.clamp(1e-6, 1 - 1e-6)
+        return F.binary_cross_entropy(clipped, target) + soft_dice(clipped, target)
 
 
 def segmentation_loss(logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
