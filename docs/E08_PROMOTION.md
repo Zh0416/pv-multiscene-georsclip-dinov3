@@ -2,22 +2,23 @@
 
 The L/14-336 diagnostic on the locked 79-image development set selected the
 fixed 128-pixel crop, 64-pixel stride, 49-window positive-only CLS route for
-the next development experiment. The latest reviewed `l14_review (1).zip`
-had SHA-256 `d1eca54c4f814aaa614fd842914b266b2382be08e2ee2b4dce35ee2351150d1a`
-and contained `l14_summary.json` SHA-256
-`b69a0b81bf51a6953cea85e9d9a8bd6e71d74e6ad528701ac8b2c9e1f0184685`.
-Its diagnostic identity SHA-256 was
+the next development experiment. The current full `l14-semantic-v3` backup
+has SHA-256 `114d4bb13db573fa64ce20dffd9e924957063ab21b0ec10af63327fcbd3e75db`
+and contains `l14_summary.json` SHA-256
+`93b7029abef5715634c545453f4d51db7210c42d00b9c8a8d1d177e6f99daa6d`.
+Its diagnostic identity SHA-256 is
 `0051de72878ee10bbebea41cb74de714a0432af5a5cc8fa4ed4f378765368eb7`.
-All four fold reports and preview images matched the previous reviewed archive
-byte for byte. The 79 raw-map SHA-256 values recorded in `timing.json` also
-matched; the summary changed only because the measured extraction times changed.
-The review ZIP does not contain raw maps, so actual raw files are checked by
-`verify-e08-cache` on Kaggle.
+All four fold reports and preview images match the previous reviewed `v2`
+archive byte for byte. The backup contains 79 readable raw maps whose SHA-256
+values match both their metadata and the previous `timing.json`; the summary
+changed only because the measured extraction times changed. The compact
+review ZIP does not contain raw maps, so `verify-e08-cache` checks the full
+source again on Kaggle.
 This is an exploratory architecture amendment, not a retroactive E04 success.
 
 The E08 diagnostic produced site-macro AP 0.60062 versus the same-split
 constant 0.21065, positive fold deltas in 4/4 folds, mean negative-site
-false-positive area 0.01465 and median Tesla T4 extraction time 6.48 seconds
+false-positive area 0.01465 and median Tesla T4 extraction time 5.74 seconds
 per image. Negative image PV-93 reached false-positive area 0.140625. The
 registered E04 value-only and V-V paths both stayed below the constant AP.
 These numbers justify a development-only downstream check; they do not prove
@@ -25,7 +26,7 @@ G2-G5 or final test performance.
 
 The new `config.kaggle.e08.json` writes to `/kaggle/working/pvstudy-l14-e08`.
 It reads *raw*, uncalibrated `window_cls_positive_only` arrays from the
-complete `/kaggle/working/pvstudy-l14-336/diagnostics/l14-semantic-v2`
+complete `/kaggle/working/pvstudy-l14-336/diagnostics/l14-semantic-v3`
 directory. The compact review ZIP does not contain those arrays. The
 cache command checks the pinned summary, diagnostic identity, unchanged
 encoder code, locked manifest/split and every raw-map digest. It extracts
@@ -45,7 +46,7 @@ import subprocess
 import sys
 
 repo = Path('/kaggle/working/pv-multiscene-georsclip-dinov3')
-branch = 'codex/e05-semantic-probe'
+branch = 'codex/l14-dinov3-study'
 if (repo / '.git').is_dir():
     subprocess.run(['git', 'fetch', 'origin', branch], cwd=repo, check=True)
     local = subprocess.run(['git', 'show-ref', '--verify', '--quiet', f'refs/heads/{branch}'],
@@ -59,10 +60,11 @@ else:
     subprocess.run(['git', 'clone', '--branch', branch,
                     'https://github.com/Zh0416/pv-multiscene-georsclip-dinov3.git',
                     str(repo)], check=True)
-subprocess.run([sys.executable, '-m', 'pip', 'install', '-e', '.'], cwd=repo, check=True)
+subprocess.run([sys.executable, '-m', 'pip', 'install', '-e', '.',
+                'open_clip_torch==4.2.2'], cwd=repo, check=True)
 base = [sys.executable, '-m', 'pvstudy.cli', '--config', 'config.kaggle.e08.json']
 source = Path('/kaggle/working/pvstudy-l14-336')
-raw = source / 'diagnostics/l14-semantic-v2/raw'
+raw = source / 'diagnostics/l14-semantic-v3/raw'
 if not (source / 'dataset_manifest.json').is_file() or len(list(raw.glob('*.npz'))) != 79:
     raise FileNotFoundError('Complete L/14 diagnostic output, including 79 raw maps, is required')
 subprocess.run(base + ['prepare-source'], cwd=repo, check=True)
@@ -72,11 +74,10 @@ subprocess.run(base + ['cache'], cwd=repo, check=True)
 subprocess.run(base + ['verify-e08-cache'], cwd=repo, check=True)
 ```
 
-If a Kaggle reset removed the raw directory, the review ZIP alone cannot
-restore it. Reattach a saved complete diagnostic directory, or rerun
-`diagnose-l14` with the original L/14 configuration and review its new
-summary. A changed summary hash requires updating the pinned E08 configuration
-after that review; do not bypass the check.
+If a Kaggle reset removed the raw directory, restore the reviewed full
+`pvstudy-l14-336-backup.zip` under `/kaggle/working` after verifying its
+SHA-256 above. The compact review ZIP alone cannot restore raw maps. Another
+`diagnose-l14` run must be reviewed before changing the pinned summary hash.
 
 Run the 12 CAM jobs first. The loop skips complete result files, so it can be
 restarted after a Kaggle session ends. Each `run-fold` checks the current

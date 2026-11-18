@@ -16,7 +16,7 @@ development results.
   `dinov3_vitl16_pretrain_sat493m-eadcf0ff.pth` at the configured Kaggle
   paths. Do not change checkpoint, normalization, DINO source commit or
   512-pixel source geometry in this run.
-- Semantic route: the reviewed `l14-semantic-v2` E08 raw maps, 49 local
+- Semantic route: the reviewed `l14-semantic-v3` E08 raw maps, 49 local
   128-pixel windows at stride 64 resized to native 336; positive-only text.
   Each outer training fold independently fits its calibrator. The native
   full-image CLS still supplies `s_global`.
@@ -78,7 +78,7 @@ model from development evidence.
 ## Kaggle execution and preservation
 
 Use the current `codex/l14-dinov3-study` branch and install the repository.
-The complete `l14-semantic-v2` directory with 79 `raw/*.npz` files must be
+The complete `l14-semantic-v3` directory with 79 `raw/*.npz` files must be
 present; the compact diagnostic review ZIP alone cannot rebuild it. From a
 Kaggle notebook:
 
@@ -101,27 +101,36 @@ else:
     subprocess.run(['git', 'clone', '--branch', branch,
                     'https://github.com/Zh0416/pv-multiscene-georsclip-dinov3.git',
                     str(repo)], check=True)
-subprocess.run([sys.executable, '-m', 'pip', 'install', '-e', '.'], cwd=repo, check=True)
+subprocess.run([sys.executable, '-m', 'pip', 'install', '-e', '.',
+                'open_clip_torch==4.2.2'], cwd=repo, check=True)
 subprocess.run([sys.executable, 'scripts/run_l14_development.py', '--stage', 'core'],
                cwd=repo, check=True)
 ```
 
-If the earlier Kaggle output has disappeared, stop before the `core` command
-and rebuild the diagnostic with the same Kaggle data and checkpoints. Keep
-the `pvstudy-e05-recovery` input dataset attached for the locked manifest
-and split:
+If the earlier Kaggle output has disappeared, first restore the reviewed
+`pvstudy-l14-336-backup.zip` as a Kaggle input. Verify its SHA-256 above,
+then extract its `pvstudy-l14-336/` directory under `/kaggle/working` before
+the `core` command. This restores the exact pinned summary, lock and 79 raw
+maps. If the full backup is unavailable, stop before `core` and rebuild the
+diagnostic with the same Kaggle data and checkpoints. Keep the
+`pvstudy-e05-recovery` input dataset attached for the locked manifest and
+split:
 
 ```python
 subprocess.run([sys.executable, 'scripts/rebuild_l14_diagnostic.py'],
                cwd=repo, check=True)
 ```
 
-This writes a new `l14-semantic-v3` run and prints its review ZIP and summary
-SHA-256. Download the ZIP for review. Do not change the pinned E08 config or
-run the development matrix until that new diagnostic has been checked; a
-fresh timing measurement normally changes the summary hash even when all
-semantic maps agree. The recovery input restores the old split, not model
-features or trained results.
+The `l14-semantic-v3` rebuild in the saved full backup has been reviewed:
+backup SHA-256 `114d4bb13db573fa64ce20dffd9e924957063ab21b0ec10af63327fcbd3e75db`,
+summary SHA-256 `93b7029abef5715634c545453f4d51db7210c42d00b9c8a8d1d177e6f99daa6d`,
+and diagnostic identity SHA-256
+`0051de72878ee10bbebea41cb74de714a0432af5a5cc8fa4ed4f378765368eb7`.
+The 79 raw-map hashes, four fold reports and preview images match the prior
+reviewed `v2` diagnostic. Its summary differs only in measured extraction
+times. The E08 config is pinned to this exact `v3` summary. If another rebuild
+produces a different summary hash, review it before changing the pin. The
+recovery input restores the old split, not model features or trained results.
 
 After the core result, inspect `l14_development_core.json`. To run the
 additional supported variants, use `--stage extended`; completed result

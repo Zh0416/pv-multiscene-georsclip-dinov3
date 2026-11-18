@@ -23,7 +23,7 @@ implement all registered controls or the G6 final retraining and test
 workflow. See the [implementation map](docs/IMPLEMENTATION.md).
 
 For a Kaggle GPU notebook with this repository checked out under
-`/kaggle/working` and the complete reviewed `l14-semantic-v2` diagnostic
+`/kaggle/working` and the complete reviewed `l14-semantic-v3` diagnostic
 still available:
 
 ```python
@@ -32,14 +32,15 @@ import subprocess
 import sys
 
 repo = Path('/kaggle/working/pv-multiscene-georsclip-dinov3')
-subprocess.run([sys.executable, '-m', 'pip', 'install', '-e', '.'], cwd=repo, check=True)
+subprocess.run([sys.executable, '-m', 'pip', 'install', '-e', '.',
+                'open_clip_torch==4.2.2'], cwd=repo, check=True)
 subprocess.run([sys.executable, 'scripts/run_l14_development.py', '--stage', 'core'],
                cwd=repo, check=True)
 ```
 
-If that diagnostic output was lost, follow the rebuild step in the
-[current protocol](docs/L14_CURRENT_PROTOCOL.md) first. Its new review
-bundle must be checked before the E08 development configuration is updated.
+If that diagnostic output was lost, restore the reviewed full backup described
+in the [current protocol](docs/L14_CURRENT_PROTOCOL.md). A new diagnostic
+rebuild needs review before the E08 development configuration is updated.
 
 The script resumes completed fold results, writes
 `/kaggle/working/pvstudy-l14-e08/l14_development_core.json`, and packages
