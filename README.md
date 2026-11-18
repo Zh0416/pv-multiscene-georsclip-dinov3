@@ -1,74 +1,52 @@
 # PV multi-scene segmentation study
 
-This is an independent implementation workspace for the pre-registered
-GeoRSCLIP + DINOv3-SAT photovoltaic segmentation study. The unchanged
-[design](PV_MULTISCENE_MODEL_DESIGN.md) is the scientific protocol. This
-repository contains no image, label, checkpoint, cached feature or trained
-model. It does not claim a model result.
+The current experiment uses frozen GeoRSCLIP ViT-L/14-336 and DINOv3-SAT
+on the locked 100-pair photovoltaic dataset. GeoRSCLIP local-window CLS
+scores (E08) provide the semantic CAM; DINOv3-SAT features provide the
+prototype-bank CAM and visual decoder features. The 79-image development
+partition uses four site-held-out folds and seeds 42/43/44. The 21-image
+test partition remains sealed.
 
-The current Kaggle configuration uses GeoRSCLIP ViT-L/14-336 in an isolated
-output directory. Follow [the L/14 Kaggle steps](docs/L14_336.md) to reuse the
-locked split and run the new development diagnostic. The original B/32
-configuration remains in `config.kaggle.b32.json`; the E03/E05/E04/E08
-instructions below describe that historical run.
-After reviewing the L/14 E08 diagnostic, use [the isolated E08 development
-workflow](docs/E08_PROMOTION.md) to build a verified cache and run G2-G5.
+Read the [current L/14 experiment protocol](docs/L14_CURRENT_PROTOCOL.md)
+for the comparison matrix, prior results, failure criteria and Kaggle
+commands. The fixed data and checkpoint paths are in
+[`config.kaggle.e08.json`](config.kaggle.e08.json). The original
+[pre-registration](PV_MULTISCENE_MODEL_DESIGN.md) remains unchanged as a
+historical scientific record; the E08 route is a later exploratory amendment.
 
-The implemented path covers strict TIFF audit, provisional 5 km site groups,
-locked 4-fold development assignment, frozen encoder interfaces, feature
-cache provenance, inner-site out-of-fold calibration and prototype responses,
-C0a-C7 CAMs (C0b only when a valid site permutation exists), a recoverable
-fusion gate, local cross-attention, S2-S7/S11/S13/S14 decoder variants,
-site-level metrics and development G2-G5 summaries. See
-[implementation status](docs/IMPLEMENTATION.md) for the remaining registered
-baselines and experiments.
+The current code implements strict data audit and split locking, encoder
+checks, E08 raw-map provenance and feature-cache verification, inner-site
+out-of-fold calibration and prototypes, C0a-C7 CAMs, C5/C5g/C6 gates,
+S2-S7/S11/S13/S14 decoder variants, site-level metrics, L/14 paired
+development reports and downloadable JSON review bundles. It does not
+implement all registered controls or the G6 final retraining and test
+workflow. See the [implementation map](docs/IMPLEMENTATION.md).
 
-After a completed B/32 development run, `pvstudy --config config.kaggle.b32.json
-diagnose-semantic` runs an isolated E05 comparison of native512 against
-overlapping native224 patch maps. It reuses the locked split and original
-cache, loads only GeoRSCLIP, and writes a compact review bundle without
-retraining or replacing the existing CAM/decoder results. See
-[E05 Kaggle instructions](docs/E05.md).
+For a Kaggle GPU notebook with this repository checked out under
+`/kaggle/working` and the complete reviewed `l14-semantic-v2` diagnostic
+still available:
 
-The follow-up E03 command `pvstudy --config config.kaggle.b32.json
-diagnose-hard-negatives` uses the completed E05 raw maps as the full-text
-reference and fits separate four-fold calibrators for positive-only text
-scores. It compares both fixed geometries without modifying earlier results.
-See [E03 Kaggle instructions](docs/E03.md).
-The isolated E04 final-block and exploratory E08 local-CLS diagnostics are
-documented in [E04/E08 Kaggle instructions](docs/E04_E08.md).
+```python
+from pathlib import Path
+import subprocess
+import sys
 
-## Setup
-
-Use Python 3.9+ and a CUDA PyTorch build for real encoder runs. In Kaggle,
-place a writable copy of this repository under `/kaggle/working` and install
-it with its declared dependencies. `config.kaggle.json` contains the new L/14
-checkpoint; the historical commands below use `config.kaggle.b32.json`.
-`config.example.json` remains a template for other environments. The DINOv3 source checkout is
-prepared separately at the pinned official commit and recorded in the cache
-identity.
-
-```bash
-pip install -e .
-pvstudy --config config.kaggle.b32.json prepare-source
-pvstudy --config config.kaggle.b32.json audit
-pvstudy --config config.kaggle.b32.json verify-encoders --id '正样本/PV-01.tif'
-pvstudy --config config.kaggle.b32.json export-qc
-# Review qc_review.html and export the actual QC.json to this working directory.
-pvstudy --config config.kaggle.b32.json lock-split --qc-file QC.json
-pvstudy --config config.kaggle.b32.json cache
-pvstudy --config config.kaggle.b32.json run-fold --fold 0 --seed 42
-pvstudy --config config.kaggle.b32.json run-fold --fold 0 --seed 42 --variant S2
-pvstudy --config config.kaggle.b32.json run-fold --fold 0 --seed 42 --variant S6
-pvstudy --config config.kaggle.b32.json summarize-dev
+repo = Path('/kaggle/working/pv-multiscene-georsclip-dinov3')
+subprocess.run([sys.executable, '-m', 'pip', 'install', '-e', '.'], cwd=repo, check=True)
+subprocess.run([sys.executable, 'scripts/run_l14_development.py', '--stage', 'core'],
+               cwd=repo, check=True)
 ```
 
-`audit` writes a **candidate**, not a locked split. Inspect images, masks,
-source scenes and duplicate candidates before `lock-split --qc-file ...`.
-Development training refuses a candidate split. `cache` excludes test images
-unless the split is locked and `--include-test` is explicit. No command in
-this version evaluates test labels; G6 remains unavailable.
+The script resumes completed fold results, writes
+`/kaggle/working/pvstudy-l14-e08/l14_development_core.json`, and packages
+the report plus result JSONs and provenance into
+`l14_development_core_review.zip`. Save the Kaggle notebook version with
+its output or download the ZIP before the session ends. The ZIP is for
+analysis, not for resuming training: it omits feature arrays, predictions
+and weights.
 
-Read [Kaggle steps](docs/KAGGLE.md), [data contract](docs/DATA_PROTOCOL.md),
-[manual quality review](docs/QUALITY_REVIEW.md), and
-[local acceptance](docs/ACCEPTANCE.md) before a full run.
+ViT-B/32 code and its E03/E05 diagnostics remain in the repository solely
+for historical reproducibility. They are **not** part of the current L/14
+experiment and their metrics are not paired controls. Historical run
+instructions are in [E03](docs/E03.md), [E05](docs/E05.md) and
+[E04/E08](docs/E04_E08.md).

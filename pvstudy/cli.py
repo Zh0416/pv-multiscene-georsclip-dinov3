@@ -8,7 +8,7 @@ import rasterio
 import torch
 
 from .cache import _source_identity, build_cache, verify_e08_cache
-from .analysis import cam_development_gates, development_gates
+from .analysis import cam_development_gates, development_gates, l14_development_report
 from .config import Config
 from .encoders import GEOMETRIES, GeoRSCLIP, load_encoders
 from .data import build_manifest
@@ -49,6 +49,10 @@ def parser() -> argparse.ArgumentParser:
     fold.add_argument("--prototypes", type=int, choices=(1, 4, 8), default=4)
     sub.add_parser("summarize-dev", help="Evaluate registered G2-G5 development gates")
     sub.add_parser("summarize-cam", help="Evaluate G2/G3 after four folds and three CAM seeds")
+    l14_summary = sub.add_parser("summarize-l14", help="Summarize current L/14 E08 decoder comparisons")
+    l14_summary.add_argument("--stage", choices=("core", "extended"), default="core")
+    l14_export = sub.add_parser("export-l14-review", help="Package L/14 development JSON evidence for download")
+    l14_export.add_argument("--stage", choices=("core", "extended"), default="core")
     probe = sub.add_parser("diagnose-semantic", help="Compare native512 and sliding224 GeoRSCLIP on locked development folds")
     probe.add_argument("--run-name", default="e05-native224-v1")
     probe.add_argument("--recompute-native", action="store_true", help="Rebuild only semantic scores when original feature arrays are lost; requires four original C1 reports")
@@ -187,6 +191,13 @@ def main(argv: list[str] | None = None) -> None:
         result = cam_development_gates(output)
         write_json(output / "cam_development_gates.json", result)
         print(result["status"])
+    elif args.command == "summarize-l14":
+        result = l14_development_report(output, args.stage)
+        write_json(output / f"l14_development_{args.stage}.json", result)
+        print(result["status"])
+    elif args.command == "export-l14-review":
+        from .review_bundle import export_l14_review
+        print(export_l14_review(output, args.stage))
     elif args.command == "diagnose-semantic":
         if config.georsclip_model != "ViT-B/32":
             raise ValueError("Legacy E05 requires B/32; use diagnose-l14 for the new checkpoint")

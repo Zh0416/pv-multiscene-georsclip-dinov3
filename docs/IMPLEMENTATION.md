@@ -1,5 +1,9 @@
 # Implementation map
 
+The current experiment is L/14-336 plus DINOv3-SAT with E08 local CLS.
+ViT-B/32-specific diagnostic rows below are historical and excluded from
+the current comparison matrix.
+
 | Step | Module | Implemented behavior |
 | --- | --- | --- |
 | G0 | `data.py`, `splits.py`, `cli.py` | Strict TIFF/hash audit; 5 km site components; seeded provisional test/4-fold split; QC lock |
@@ -14,6 +18,7 @@
 | E08 exploratory | `semantic_extensions.py`, `GeoRSCLIP.encode_window_cls` | Fixed 128/64 local CLS windows resized to 224, uniform coverage averaging, positive-only text; isolated development diagnostic |
 | L/14-336 adaptation | `l14_probe.py`, `encoders.py` | Independent checkpoint/output identity, 518 padded dense input, nine native-336 windows, last-block E04 and resized-336 E08; separate four-fold development calibration |
 | L/14 E08 development | `e08_source.py`, `cache.py`, `analysis.py` | Pinned diagnostic raw-score import into an isolated cache, per-image equality verification, inner-fold recalibration and staged CAM/decoder development gates |
+| Current L/14 reporting | `analysis.py`, `review_bundle.py`, `scripts/run_l14_development.py` | Core S2/S14/S6/S7 and extended implemented controls, paired site intervals, resumable Kaggle runner and portable JSON evidence ZIP |
 
 Registered items **not yet implemented**: promotion of E04/E05 paths into the full training pipeline; random-text C8/S12; S0/S1,
 S8/S10, S9 and external pretrained S15/S16; optional loss/normalization/

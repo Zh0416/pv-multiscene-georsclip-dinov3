@@ -4,7 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
-from .io import read_json
+from .io import read_json, sha256
+from .metrics import paired_site_bootstrap
 
 SEEDS = (42, 43, 44)
 FOLDS = range(4)
@@ -152,3 +153,82 @@ def development_gates(output: Path) -> dict:
             "G4": {**g4, "quality_pass": g4["delta"] >= 0.02 and g4["positive_folds"] >= 3 and g4["negative_fp_delta"] <= 0.005},
             "G5": {**g5, "quality_pass": g5["delta"] >= 0.01 and g5["positive_folds"] >= 3 and g5["negative_fp_delta"] <= 0.005},
             "limits": "G2-G5 require real encoder quality review and full baseline grid before G6; no test result inferred"}
+
+
+L14_CORE = ("S2", "S14", "S6", "S7")
+L14_EXTENDED = L14_CORE + ("S3", "S4", "S5", "S11", "S13")
+
+
+def _paired_sites(grid: dict, candidate: str, control: str, key: str, *, cam: bool = False) -> dict:
+    left = _site_values(grid, "S2" if cam else candidate, candidate if cam else "", cam=cam)
+    right = _site_values(grid, "S2" if cam else control, control if cam else "", cam=cam)
+    if left.keys() != right.keys():
+        raise ValueError("Paired comparison uses different site/seed pairs")
+    def site_means(rows: dict) -> dict[str, float]:
+        grouped = {}
+        for (site, _seed), row in rows.items():
+            if row[key] is not None:
+                grouped.setdefault(site, []).append(row[key])
+        if any(len(values) != len(SEEDS) for values in grouped.values()):
+            raise ValueError("Each paired site needs all three seeds")
+        return {site: float(np.mean(values)) for site, values in grouped.items()}
+    return paired_site_bootstrap(site_means(left), site_means(right))
+
+
+def l14_development_report(output: Path, stage: str = "core") -> dict:
+    if stage not in ("core", "extended"):
+        raise ValueError("L/14 development stage must be core or extended")
+    variants = L14_CORE if stage == "core" else L14_EXTENDED
+    loaded = load_grid(output, variants=variants)
+    cam_paths = [output / f"fold-{fold}" / f"seed-{seed}" / "result-cam.json"
+                 for fold in FOLDS for seed in SEEDS]
+    missing = loaded["missing"] + [str(path) for path in cam_paths if not path.is_file()]
+    if missing:
+        return {"status": "incomplete", "stage": stage, "missing_result_files": missing}
+    grid = loaded["results"]
+    cam_grid = {("S2", fold, seed): read_json(output / f"fold-{fold}" / f"seed-{seed}" / "result-cam.json")
+                for fold in FOLDS for seed in SEEDS}
+    if _check_identities({**grid, **{("CAM", f, s): value for (_, f, s), value in cam_grid.items()}}, output) != "window_cls_positive_only":
+        raise ValueError("L/14 development report requires the verified E08 semantic mode")
+    index = read_json(output / "cache" / "index.json")
+    if index["identity"].get("georsclip_model") != "ViT-L-14-336":
+        raise ValueError("L/14 development report requires GeoRSCLIP ViT-L-14-336")
+    verification = read_json(output / "e08_cache_verification.json")
+    if (verification.get("status") != "e08_cache_verified" or
+        verification.get("cache_index_sha256") != sha256(output / "cache" / "index.json") or
+        verification.get("manifest_sha256") != sha256(output / "dataset_manifest.json") or
+        verification.get("split_sha256") != sha256(output / "split_lock.json")):
+        raise ValueError("L/14 development report requires current E08 cache verification")
+    cam = _cam_gates(cam_grid)
+    cam["G2"]["semantic"]["paired_sites"] = _paired_sites(cam_grid, "C1", "C0a", "ap", cam=True)
+    cam["G2"]["bank"]["paired_sites"] = _paired_sites(cam_grid, "C2", "C0a", "ap", cam=True)
+    cam["G3"]["paired_sites"] = _paired_sites(cam_grid, "C6", cam["best_simple_cam"], "ap", cam=True)
+    c6_vs_c7 = _comparison(cam_grid, "C6", "C7", "ap", cam=True)
+    cam["C6_vs_C7"] = {**c6_vs_c7,
+                       "quality_pass": c6_vs_c7["delta"] >= 0.01 and c6_vs_c7["positive_folds"] >= 3 and
+                                       c6_vs_c7["negative_fp_delta"] <= 0.005,
+                       "paired_sites": _paired_sites(cam_grid, "C6", "C7", "ap", cam=True)}
+    segmentation = {}
+    for variant in variants:
+        rows = _site_values(grid, variant, "", cam=False)
+        segmentation[variant] = {key: _macro(rows, key) for key in ("dice", "iou", "ap", "negative_fp")}
+    pairs = [("S14", "S2"), ("S6", "S14"), ("S6", "S2"), ("S7", "S6")]
+    if stage == "extended":
+        pairs += [("S6", "S11"), ("S6", "S13"), ("S6", "S3"), ("S6", "S4"),
+                  ("S6", "S5"), ("S14", "S13")]
+    comparisons = {}
+    for candidate, control in pairs:
+        name = f"{candidate}_vs_{control}"
+        comparison = _comparison(grid, candidate, control, "dice", cam=False)
+        comparison["paired_sites"] = _paired_sites(grid, candidate, control, "dice")
+        threshold = {"S6_vs_S14": 0.01, "S6_vs_S2": 0.02, "S7_vs_S6": 0.01,
+                     "S6_vs_S11": 0.01, "S6_vs_S13": 0.01}.get(name)
+        comparison["quality_pass"] = (comparison["delta"] >= threshold and
+                                      comparison["positive_folds"] >= 3 and
+                                      comparison["negative_fp_delta"] <= 0.005) if threshold is not None else None
+        comparisons[name] = comparison
+    return {"status": "l14_development_complete", "stage": stage,
+            "semantic_mode": "window_cls_positive_only", "georsclip_model": "ViT-L-14-336",
+            "variants": list(variants), "CAM": cam, "segmentation": segmentation,
+            "comparisons": comparisons,
+            "limits": "Development-only comparisons. Passing the registered gates and separate controls is required for full fusion claims; no final test or G6 inference."}
