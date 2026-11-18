@@ -37,6 +37,10 @@ subprocess.run([sys.executable, 'scripts/run_l14_development.py', '--stage', 'co
                cwd=repo, check=True)
 ```
 
+If that diagnostic output was lost, follow the rebuild step in the
+[current protocol](docs/L14_CURRENT_PROTOCOL.md) first. Its new review
+bundle must be checked before the E08 development configuration is updated.
+
 The script resumes completed fold results, writes
 `/kaggle/working/pvstudy-l14-e08/l14_development_core.json`, and packages
 the report plus result JSONs and provenance into

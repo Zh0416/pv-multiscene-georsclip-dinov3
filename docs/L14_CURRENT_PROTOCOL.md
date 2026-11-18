@@ -106,6 +106,23 @@ subprocess.run([sys.executable, 'scripts/run_l14_development.py', '--stage', 'co
                cwd=repo, check=True)
 ```
 
+If the earlier Kaggle output has disappeared, stop before the `core` command
+and rebuild the diagnostic with the same Kaggle data and checkpoints. Keep
+the `pvstudy-e05-recovery` input dataset attached for the locked manifest
+and split:
+
+```python
+subprocess.run([sys.executable, 'scripts/rebuild_l14_diagnostic.py'],
+               cwd=repo, check=True)
+```
+
+This writes a new `l14-semantic-v3` run and prints its review ZIP and summary
+SHA-256. Download the ZIP for review. Do not change the pinned E08 config or
+run the development matrix until that new diagnostic has been checked; a
+fresh timing measurement normally changes the summary hash even when all
+semantic maps agree. The recovery input restores the old split, not model
+features or trained results.
+
 After the core result, inspect `l14_development_core.json`. To run the
 additional supported variants, use `--stage extended`; completed result
 files are reused, and a separate `l14_development_extended.json` is written.

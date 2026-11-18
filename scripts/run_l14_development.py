@@ -14,6 +14,26 @@ EXTENDED = CORE + ("S3", "S4", "S5", "S11", "S13")
 SEEDS = (42, 43, 44)
 
 
+def checked_diagnostic(config: dict) -> Path:
+    diagnostic = Path(config["semantic_diagnostic_dir"])
+    summary = diagnostic / "l14_summary.json"
+    if not summary.is_file():
+        raise FileNotFoundError(
+            f"Reviewed L/14 summary is missing: {summary}. "
+            "Restore the complete diagnostic output or run scripts/rebuild_l14_diagnostic.py; "
+            "review its new summary before changing the E08 configuration.")
+    actual = hashlib.sha256(summary.read_bytes()).hexdigest()
+    expected = config["semantic_summary_sha256"]
+    if actual != expected:
+        raise ValueError(f"L/14 diagnostic summary SHA-256 differs: expected {expected}, found {actual}. "
+                         "Review the new diagnostic before updating the E08 configuration.")
+    count = len(list((diagnostic / "raw").glob("*.npz")))
+    if count != 79:
+        raise FileNotFoundError(f"L/14 diagnostic has {count}/79 raw maps at {diagnostic / 'raw'}. "
+                                "The review ZIP cannot restore them; rerun the diagnostic.")
+    return diagnostic.parents[1]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, default=Path("config.kaggle.e08.json"))
@@ -25,13 +45,7 @@ def main() -> None:
     if config.get("georsclip_model") != "ViT-L-14-336" or config.get("semantic_mode") != "window_cls_positive_only":
         raise ValueError("This runner requires the current L/14 E08 configuration")
     output = Path(config["output_dir"])
-    diagnostic = Path(config["semantic_diagnostic_dir"])
-    summary = diagnostic / "l14_summary.json"
-    if not summary.is_file() or hashlib.sha256(summary.read_bytes()).hexdigest() != config["semantic_summary_sha256"]:
-        raise FileNotFoundError("Reviewed L/14 diagnostic summary missing or changed")
-    if len(list((diagnostic / "raw").glob("*.npz"))) != 79:
-        raise FileNotFoundError("The reviewed L/14 E08 diagnostic needs 79 raw maps")
-    source = diagnostic.parents[1]
+    source = checked_diagnostic(config)
     if not all((source / name).is_file() for name in ("dataset_manifest.json", "split_lock.json")):
         raise FileNotFoundError("The locked manifest and split are missing from the L/14 source output")
     base = [sys.executable, "-m", "pvstudy.cli", "--config", str(config_path)]

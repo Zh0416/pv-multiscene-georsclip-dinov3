@@ -8,9 +8,28 @@ from pvstudy.analysis import L14_EXTENDED, l14_development_report
 from pvstudy.experiment import _identity
 from pvstudy.io import read_json, sha256, write_json
 from pvstudy.review_bundle import export_l14_review
+from scripts.run_l14_development import checked_diagnostic
 
 
 class L14ReportTests(unittest.TestCase):
+    def test_missing_or_changed_diagnostic_is_actionable(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            diagnostic = Path(temporary) / "source" / "diagnostics" / "l14-semantic-v2"
+            config = {"semantic_diagnostic_dir": str(diagnostic), "semantic_summary_sha256": "0" * 64}
+            with self.assertRaisesRegex(FileNotFoundError, "rebuild_l14_diagnostic.py"):
+                checked_diagnostic(config)
+            write_json(diagnostic / "l14_summary.json", {"status": "fixture"})
+            with self.assertRaisesRegex(ValueError, "SHA-256 differs"):
+                checked_diagnostic(config)
+            config["semantic_summary_sha256"] = sha256(diagnostic / "l14_summary.json")
+            with self.assertRaisesRegex(FileNotFoundError, "0/79 raw maps"):
+                checked_diagnostic(config)
+            raw = diagnostic / "raw"
+            raw.mkdir()
+            for number in range(79):
+                (raw / f"{number}.npz").touch()
+            self.assertEqual(checked_diagnostic(config), diagnostic.parents[1])
+
     def _make_grid(self, output: Path) -> None:
         manifest = {"images": []}
         split = {"status": "locked_after_manual_qc", "assignment": {}}
